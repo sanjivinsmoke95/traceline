@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Shell from '../layout';
-import { Alert, Badge, Button, Card, Field, Input, LoadingState, Select, Textarea } from '../ui-kit';
+import { Alert, Badge, Button, Card, Field, Input, LoadingState } from '../ui-kit';
 import { Check } from 'lucide-react';
 import { api } from '../api';
 import { useCaseContext } from '../caseContext';
@@ -9,10 +9,8 @@ import CaseBanner from '../components/CaseBanner';
 import EvidenceUploader from '../components/EvidenceUploader';
 import JobStages from '../components/JobStages';
 import { ACTIVE, STAGE_LABEL } from '../lib/jobs';
-import { browserOffset, toIncidentAt } from '../lib/incident';
 
 const STEPS = ['Investigation', 'Evidence', 'Processing'];
-const REF = /^[A-Za-z0-9_-]{3,40}$/;
 
 function Stepper({ step }) {
   return (
@@ -26,41 +24,22 @@ function Stepper({ step }) {
   );
 }
 
-/** Step 1. Creates the case. Incident time (with the time zone offset you choose) and location are stored by the backend. */
+/** Step 1. Creates the case from a title. Incident time, location, time zone and reference are not asked for here. */
 function Details({ initial, onCreated }) {
-  const [f, setF] = useState({ title: initial.title, designation: initial.designation, incident_at: '', location: '', description: '', reference: '' });
+  const [title, setTitle] = useState(initial.title);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  const refErr = f.reference && !REF.test(f.reference) ? 'Use 3 to 40 letters, digits, dash or underscore.' : undefined;
   const submit = async (e) => {
     e.preventDefault(); setBusy(true); setErr(null);
     try {
-      const body = { title: f.title.trim(), designation: f.designation };
-      if (f.description.trim()) body.description = f.description.trim();
-      if (f.reference) body.code = f.reference;
-      if (f.incident_at) body.incident_at = toIncidentAt(f.incident_at, browserOffset(f.incident_at));
-      if (f.location.trim()) body.location_text = f.location.trim();
-      const c = await api.createCase(body);
+      const c = await api.createCase({ title: title.trim(), designation: 'real' });
       onCreated(c);
     } catch (x) { setErr(x.message); setBusy(false); }
   };
   return (
     <Card as="form" onSubmit={submit} className="space-y-4" aria-label="Create investigation">
-      <Field label="Case title"><Input required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} disabled={busy} /></Field>
-      <Field label="What is this footage?" hint="Real and synthetic evidence never share a case.">
-        <Select value={f.designation} onChange={(e) => setF({ ...f, designation: e.target.value })} disabled={busy}
-                options={[{ value: 'real', label: 'Real incident footage' }, { value: 'staged', label: 'Staged / recreated' }, { value: 'synthetic', label: 'Synthetic / generated' }]} />
-      </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Incident date and time" optional hint="The time you state. It is not read from any file and is not used to pick frames."><Input type="datetime-local" value={f.incident_at} onChange={(e) => setF({ ...f, incident_at: e.target.value })} disabled={busy} /></Field>
-        <Field label="Location" optional hint="Free text. No map is drawn and no coordinates are looked up."><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} disabled={busy} /></Field>
-      </div>
-      <Field label="Description" optional><Textarea rows={3} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} disabled={busy} /></Field>
-      <Field label="Reference" optional error={refErr} hint="Used as the case code if given, for example your report number."><Input value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} disabled={busy} /></Field>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" variant="primary" loading={busy} disabled={!f.title.trim() || !!refErr}>Create investigation</Button>
-        {f.designation === 'synthetic' && <Badge variant="warning">will be labelled synthetic</Badge>}
-      </div>
+      <Field label="Case title"><Input required autoFocus value={title} onChange={(e) => setTitle(e.target.value)} disabled={busy} placeholder="e.g. Junction collision, 4th Ave" /></Field>
+      <Button type="submit" variant="primary" loading={busy} disabled={!title.trim()}>Create investigation</Button>
       {err && <Alert variant="danger" title="Could not create the case">{err}</Alert>}
     </Card>
   );
@@ -161,7 +140,7 @@ export default function NewCase() {
         {loading ? <LoadingState rows={3} label="Loading the case" /> : step === 0 ? <Details initial={initial} onCreated={created} /> : step === 1 ? (
           <div className="space-y-4">
             <Card><p className="t-small"><span className="font-medium">{c.title}</span> <span className="mono t-caption text-fg-3">{c.code}</span></p></Card>
-            <Card><EvidenceUploader caseId={c.id} designation={c.designation} submitLabel="Upload and analyse" onDone={({ uploaded }) => { setDups(uploaded.filter((u) => u.duplicate).map((u) => u.evidence.original_filename || u.evidence.id)); setStep(2); }} /></Card>
+            <Card><EvidenceUploader simple caseId={c.id} designation={c.designation} submitLabel="Upload and analyse" onDone={({ uploaded }) => { setDups(uploaded.filter((u) => u.duplicate).map((u) => u.evidence.original_filename || u.evidence.id)); setStep(2); }} /></Card>
             {(c.counts?.evidence_total ?? 0) > 0 && <Button variant="outline" onClick={() => setStep(2)}>Continue to processing</Button>}
           </div>
         ) : (<>{dups.length > 0 && <Alert variant="info" className="mb-4" title="Already in this case">{dups.join(', ')} {dups.length === 1 ? 'was' : 'were'} already in this case and was not added again. Identical files are not counted as separate corroboration.</Alert>}<Processing c={c} /></>)}

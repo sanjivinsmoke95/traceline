@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, ToastProvider } from '../ui-kit';
 import NewCase from './NewCase';
+import EvidenceUploader from '../components/EvidenceUploader';
 import { useCaseContext } from '../caseContext';
 
 vi.mock('../api', () => ({
@@ -26,43 +27,64 @@ const submit = () => fireEvent.click(screen.getByRole('button', { name: /Upload 
 beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); useCaseContext.setState({ selected: null }); api.cases.mockResolvedValue({ items: [] }); });
 
 describe('guided flow: create investigation', () => {
-  it('sends only the fields that have a backend home and remembers the new case as the selected one', async () => {
-    wrap('/new?title=Junction&designation=real');
-    fireEvent.change(screen.getByLabelText(/^Description/), { target: { value: 'North approach' } });
-    fireEvent.change(screen.getByLabelText(/^Reference/), { target: { value: 'REF-2026-14' } });
+  it('creates the case from a title alone and remembers it as the selected one', async () => {
+    wrap('/new?title=Junction');
     await create();
-    expect(api.createCase).toHaveBeenCalledWith({ title: 'Junction', designation: 'real', description: 'North approach', code: 'REF-2026-14' });
+    expect(api.createCase).toHaveBeenCalledWith({ title: 'Junction', designation: 'real' });
     expect(useCaseContext.getState().selected).toMatchObject({ id: 'c1', designation: 'real' });
   });
-  it('sends incident time (with the browser offset, not asked for) and the location to the backend, and no longer says they are browser-only', async () => {
-    wrap('/new?title=Junction&designation=real');
-    fireEvent.change(screen.getByLabelText(/^Incident date and time/), { target: { value: '2026-10-30T10:32' } });
-    expect(screen.queryByLabelText(/Time zone offset/)).toBeNull();
-    fireEvent.change(screen.getByLabelText(/^Location/), { target: { value: 'Main St' } });
-    expect(screen.queryByText(/Kept in this browser only/)).toBeNull();
-    await create();
-    expect(api.createCase).toHaveBeenCalledWith({ title: 'Junction', designation: 'real', incident_at: expect.stringMatching(/^2026-10-30T10:32:00[+-]\d{2}:\d{2}$/), location_text: 'Main St' });
-    expect(localStorage.getItem('traceline.caseMeta.c1')).toBeNull();
+  it('does not ask for date, location, time zone, offset, description or reference', () => {
+    wrap('/new?title=Junction');
+    for (const label of [/Incident date/, /Location/, /Time ?zone/, /offset/i, /Description/, /Reference/]) expect(screen.queryByLabelText(label)).toBeNull();
+    expect(screen.getByLabelText('Case title')).toBeInTheDocument();
   });
-  it('omits incident time and location when they are left empty', async () => {
-    wrap('/new?title=Junction&designation=real');
-    await create();
-    const body = api.createCase.mock.calls[0][0];
-    expect(body).not.toHaveProperty('incident_at');
-    expect(body).not.toHaveProperty('location_text');
-  });
-  it('refuses a reference the backend would reject', () => {
-    wrap('/new?title=Junction&designation=real');
-    fireEvent.change(screen.getByLabelText(/^Reference/), { target: { value: 'a b' } });
-    expect(screen.getByText(/3 to 40 letters/)).toBeInTheDocument();
+  it('will not create a case without a title', () => {
+    wrap('/new');
     expect(screen.getByRole('button', { name: /Create investigation/ })).toBeDisabled();
   });
 });
 
-describe('guided flow: upload with source metadata', () => {
-  it('shows every source field for each chosen video, including Other, which is stored but not analysed', async () => {
-    wrap('/new?title=Junction&designation=real');
+describe('guided flow: evidence step asks only for video, camera view and witness', () => {
+  it('shows the videos, a dashcam/CCTV choice per video and the witness statement, and nothing else', async () => {
+    wrap('/new?title=Junction');
     await create();
+    expect(screen.getByText('Videos')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Witness statement/)).toBeInTheDocument();
+    expect(screen.queryByText(/Sensor CSV/)).toBeNull();
+    pick('north.mp4');
+    expect(screen.getByRole('radio', { name: 'Dashcam view' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'CCTV view' })).toBeInTheDocument();
+    for (const label of ['Camera name', 'Location (text)', 'Recording start', 'Recording end', 'Timezone', 'Clock offset (seconds)', 'Start certainty ± seconds']) expect(screen.queryByLabelText(label)).toBeNull();
+  });
+  it('uploads with the chosen camera view and declares no clock', async () => {
+    wrap('/new?title=Junction');
+    await create();
+    api.upload.mockResolvedValue({ duplicate: false, evidence: { id: 'ev_1' } });
+    api.jobs.mockResolvedValue({ items: [] }); api.evidence.mockResolvedValue({ items: [] });
+    pick('north.mp4');
+    fireEvent.click(screen.getByRole('radio', { name: 'Dashcam view' }));
+    submit();
+    await waitFor(() => expect(api.patchSource).toHaveBeenCalled());
+    expect(api.upload.mock.calls[0][2]).toBe('dashcam');
+    expect(api.patchSource).toHaveBeenCalledWith('ev_1', { display_name: null, camera_role: 'dashcam', location_text: null, recording_start: null, recording_end: null, timezone: null });
+    expect(api.setClock).not.toHaveBeenCalled();
+  });
+  it('stores a witness statement', async () => {
+    wrap('/new?title=Junction');
+    await create();
+    api.addWitness.mockResolvedValue({ id: 'w1' }); api.addStatement.mockResolvedValue({});
+    api.jobs.mockResolvedValue({ items: [] }); api.evidence.mockResolvedValue({ items: [] });
+    fireEvent.change(screen.getByLabelText(/Witness statement/), { target: { value: 'The car ran the red light.' } });
+    submit();
+    await waitFor(() => expect(api.addStatement).toHaveBeenCalledWith('w1', 'The car ran the red light.', false));
+  });
+});
+
+describe('full source details (Evidence page uploader)', () => {
+  const uploader = () => render(<ThemeProvider defaultTheme="dark" storageKey="t"><ToastProvider><MemoryRouter><EvidenceUploader caseId="c1" designation="real" onDone={() => {}} /></MemoryRouter></ToastProvider></ThemeProvider>);
+  const go = () => fireEvent.click(screen.getByRole('button', { name: /Upload evidence/ }));
+  it('shows every source field for each chosen video, including Other, which is stored but not analysed', () => {
+    uploader();
     pick('north.mp4');
     const group = screen.getByRole('group', { name: /Source details for north.mp4/ });
     for (const label of ['Camera name', 'Camera type', 'Location (text)', 'Recording start', 'Recording end', 'Timezone', 'Clock offset (seconds)', 'Start certainty ± seconds']) {
@@ -71,73 +93,68 @@ describe('guided flow: upload with source metadata', () => {
     expect(within(group).getByRole('option', { name: /Other/ })).not.toBeDisabled();
   });
   it('declares the clock from start, timezone, offset and stated uncertainty, and sends the chosen camera kind', async () => {
-    wrap('/new?title=Junction&designation=real');
-    await create();
+    uploader();
     api.upload.mockResolvedValue({ duplicate: false, evidence: { id: 'ev_1' } });
     api.setClock.mockResolvedValue({});
-    api.jobs.mockResolvedValue({ items: [] }); api.evidence.mockResolvedValue({ items: [] });
     pick('north.mp4');
     fireEvent.change(screen.getByLabelText('Camera type'), { target: { value: 'dashcam' } });
     fireEvent.change(screen.getByLabelText('Recording start'), { target: { value: '2026-10-30T10:00' } });
     fireEvent.change(screen.getByLabelText('Timezone'), { target: { value: 'UTC' } });
     fireEvent.change(screen.getByLabelText('Clock offset (seconds)'), { target: { value: '30' } });
     fireEvent.change(screen.getByLabelText('Start certainty ± seconds'), { target: { value: '2' } });
-    submit();
+    go();
     await waitFor(() => expect(api.setClock).toHaveBeenCalled());
     expect(api.upload.mock.calls[0][2]).toBe('dashcam');
     expect(api.patchSource).toHaveBeenCalledWith('ev_1', { display_name: null, camera_role: 'dashcam', location_text: null, recording_start: '2026-10-30T10:00:00.000Z', recording_end: null, timezone: 'UTC' });
     expect(api.setClock).toHaveBeenCalledWith('ev_1', { utc_zero: '2026-10-30T09:59:30.000Z', bound_ms: 2000, basis: 'declared_by_investigator', timezone: 'UTC', note: 'stated clock offset 30 s' });
   });
   it('stores camera name, type, location and window on the backend source and uploads Other as kind other', async () => {
-    wrap('/new?title=Junction&designation=real');
-    await create();
+    uploader();
     api.upload.mockResolvedValue({ duplicate: false, evidence: { id: 'ev_9' } });
-    api.jobs.mockResolvedValue({ items: [] }); api.evidence.mockResolvedValue({ items: [] });
     pick('phone.mp4');
     fireEvent.change(screen.getByLabelText('Camera name'), { target: { value: 'Shop camera' } });
     fireEvent.change(screen.getByLabelText('Camera type'), { target: { value: 'other' } });
     fireEvent.change(screen.getByLabelText('Location (text)'), { target: { value: 'Outside the pharmacy' } });
     expect(screen.getByText(/not sent to vehicle detection or tracking/)).toBeInTheDocument();
-    submit();
+    go();
     await waitFor(() => expect(api.patchSource).toHaveBeenCalled());
     expect(api.upload.mock.calls[0][2]).toBe('other');
     expect(api.patchSource).toHaveBeenCalledWith('ev_9', expect.objectContaining({ display_name: 'Shop camera', camera_role: 'other', location_text: 'Outside the pharmacy', recording_start: null }));
     expect(api.setClock).not.toHaveBeenCalled();
   });
   it('does not overwrite the stored details of a duplicate upload', async () => {
-    wrap('/new?title=Junction&designation=real');
-    await create();
+    uploader();
     api.upload.mockResolvedValue({ duplicate: true, evidence: { id: 'ev_1', original_filename: 'same.mp4' } });
-    api.jobs.mockResolvedValue({ items: [] }); api.evidence.mockResolvedValue({ items: [] });
     pick('same.mp4');
     fireEvent.change(screen.getByLabelText('Camera name'), { target: { value: 'Changed' } });
-    submit();
+    go();
     await waitFor(() => expect(api.upload).toHaveBeenCalled());
-    await screen.findByText(/Already in this case/);
+    await screen.findByText(/already in this case/);
     expect(api.patchSource).not.toHaveBeenCalled();
   });
   it('does not invent an uncertainty: a start time without one blocks the upload', async () => {
-    wrap('/new?title=Junction&designation=real');
-    await create();
+    uploader();
     pick('north.mp4');
     fireEvent.change(screen.getByLabelText('Recording start'), { target: { value: '2026-10-30T10:00' } });
     fireEvent.change(screen.getByLabelText('Timezone'), { target: { value: 'UTC' } });
-    submit();
+    go();
     expect(await screen.findByText(/State how certain the start time is/)).toBeInTheDocument();
     expect(api.upload).not.toHaveBeenCalled();
   });
   it('rejects an end before the start', async () => {
-    wrap('/new?title=Junction&designation=real');
-    await create();
+    uploader();
     pick('north.mp4');
     fireEvent.change(screen.getByLabelText('Recording start'), { target: { value: '2026-10-30T10:00' } });
     fireEvent.change(screen.getByLabelText('Recording end'), { target: { value: '2026-10-30T09:00' } });
     fireEvent.change(screen.getByLabelText('Timezone'), { target: { value: 'UTC' } });
     fireEvent.change(screen.getByLabelText('Start certainty ± seconds'), { target: { value: '1' } });
-    submit();
+    go();
     expect(await screen.findByText(/end must be after the start/)).toBeInTheDocument();
     expect(api.upload).not.toHaveBeenCalled();
   });
+});
+
+describe('guided flow: upload outcomes', () => {
   it('a rejected upload shows the backend message and does not build a reconstruction', async () => {
     wrap('/new?title=Broken&designation=real');
     await create();
