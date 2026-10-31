@@ -7,6 +7,8 @@ It lines up dashcam and CCTV video, witness statements and vehicle sensor logs o
 ## Run it
 Already set up? `./run.sh` starts the API and the web app together, then open http://localhost:5173. The site needs **both** running, plus PostgreSQL.
 
+**If the page says "the backend did not respond":** only the web app is running. The data lives in a local backend and PostgreSQL that are not part of the git repo (cases, videos and model weights are git-ignored), so every machine runs its own: do the first-time setup below once, then `./run.sh`. A fresh clone starts empty; `scripts/seed_demo.py` adds the synthetic demo cases, and real clips have to be uploaded.
+
 First-time setup:
 ```bash
 cd backend

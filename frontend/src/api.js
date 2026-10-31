@@ -9,11 +9,23 @@ export class ApiError extends Error {
   }
 }
 
+export const API_DOWN = 'The TraceLine backend did not respond. The web app only shows data from the API (port 8000), so it must be running with PostgreSQL: start it with ./run.sh, or see "Run it" in the README.';
+
+/** A dead backend shows up as a failed fetch, or as the dev proxy's empty 5xx; either way, say what is missing instead of "HTTP 500". */
 async function req(path, opts = {}) {
-  const res = await fetch(BASE + path, { headers: { 'Content-Type': 'application/json', 'X-Actor': 'investigator' }, ...opts });
+  let res;
+  try {
+    res = await fetch(BASE + path, { headers: { 'Content-Type': 'application/json', 'X-Actor': 'investigator' }, ...opts });
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+    throw new ApiError(0, { error: { code: 'api_unreachable', message: API_DOWN } });
+  }
   const type = res.headers.get('content-type') || '';
-  const body = type.includes('json') ? await res.json() : await res.text();
-  if (!res.ok) throw new ApiError(res.status, body);
+  const body = type.includes('json') ? await res.json().catch(() => null) : await res.text();
+  if (!res.ok) {
+    if (res.status >= 500 && !body?.error) throw new ApiError(res.status, { error: { code: 'api_unreachable', message: API_DOWN } });
+    throw new ApiError(res.status, body);
+  }
   return body;
 }
 
@@ -67,9 +79,10 @@ export const api = {
   upload: async (caseId, file, kind, synthetic) => {
     const fd = new FormData();
     fd.append('file', file); fd.append('kind', kind); fd.append('synthetic', String(synthetic));
-    const res = await fetch(`${BASE}/cases/${caseId}/evidence`, { method: 'POST', body: fd, headers: { 'X-Actor': 'investigator' } });
-    const body = await res.json();
-    if (!res.ok) throw new ApiError(res.status, body);
+    let res;
+    try { res = await fetch(`${BASE}/cases/${caseId}/evidence`, { method: 'POST', body: fd, headers: { 'X-Actor': 'investigator' } }); } catch { throw new ApiError(0, { error: { code: 'api_unreachable', message: API_DOWN } }); }
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiError(res.status, body || (res.status >= 500 ? { error: { code: 'api_unreachable', message: API_DOWN } } : null));
     return body;
   },
   jobs: (id) => req(`/cases/${id}/jobs`),
