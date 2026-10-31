@@ -29,6 +29,7 @@ def claim_out(c: WitnessClaim, text: str) -> dict:
     n = c.normalized or {}
     return {
         "id": c.id, "statement_id": c.statement_id, "extraction_status": c.extraction_status, "model_run_id": c.model_run_id,
+        "extraction_method": n.get("extraction_method") or ("manual" if c.extraction_status == "manual" else "llm"),
         # layer 1: what the witness actually said (verbatim, with position in the original statement)
         "explicit_statement": {"text": c.source_text, "char_start": c.char_start, "char_end": c.char_end,
                                "context_before": text[max(0, c.char_start - 40):c.char_start], "context_after": text[c.char_end:c.char_end + 40]},
@@ -53,13 +54,18 @@ def extract(statement_id: str, background: BackgroundTasks, db: Session = Depend
     if not case.allow_external_inference:
         raise AppError(403, "EXTERNAL_INFERENCE_DISABLED", "This case does not allow sending content to an external model. "
                        "Enter claims manually, or enable the case policy first.", {"manual_endpoint": f"/api/v1/statements/{st.id}/claims"})
-    if not settings.featherless_configured:
-        raise AppError(503, "LLM_NOT_CONFIGURED", "FEATHERLESS_API_KEY is not configured on the server")
-    job = jobs.maybe_enqueue_claims(db, settings, case, st)
+    job = jobs.maybe_enqueue_claims(db, settings, case, st, explicit=True)
     audit.record(db, actor=actor, action="claim_extraction_requested", case_id=case.id, target_type="statement", target_id=st.id)
     db.commit()
     background.add_task(jobs.run_pending, factory, settings)
-    return job_out(job)
+    out = job_out(job)
+    configured = settings.featherless_configured
+    out["extraction_method"] = "llm" if configured else "deterministic_fallback"
+    out["llm_used"] = None if configured else False
+    out["note"] = ("queued: the hosted model is tried first; if it is unavailable or its output is invalid, rule-based sentence extraction "
+                   "runs instead (see job.result.extraction_method)" if configured else
+                   "FEATHERLESS_API_KEY is not configured: no LLM runs; rule-based sentence extraction is used (exact spans, no interpretation)")
+    return out
 
 
 def latest_model_run(db: Session, st: WitnessStatement) -> ModelRun | None:
@@ -78,7 +84,9 @@ def list_claims(statement_id: str, db: Session = Depends(get_db)) -> dict:
     claims = [c for c in db.execute(select(WitnessClaim).where(WitnessClaim.statement_id == st.id).order_by(WitnessClaim.char_start)).scalars()
               if c.model_run_id is None or (run and c.model_run_id == run.id)]
     return {"statement_id": st.id, "text_original": st.text_original, "synthetic": st.synthetic,
-            "extraction_run": {"id": run.id, "model_id": run.model_id, "status": run.status, "metrics": run.metrics} if run else None,
+            "extraction_run": {"id": run.id, "model_id": run.model_id, "status": run.status, "metrics": run.metrics,
+                               "extraction_method": wit.FALLBACK_METHOD if run.model_id == wit.FALLBACK_METHOD else "llm",
+                               "llm_used": run.model_id != wit.FALLBACK_METHOD} if run else None,
             "items": [claim_out(c, st.text_original) for c in claims], "note": STATUS_NOTE}
 
 

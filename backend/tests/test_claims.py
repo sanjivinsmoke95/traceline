@@ -180,8 +180,8 @@ def test_prompt_injection_in_a_statement_cannot_add_claims_or_fields(api):
     api.ok(bad)
     _, st2 = add_statement(c, case2["id"], text_=evil + " Another witness line.")  # different text: the ledger cache must not answer this one
     j = jobs_of(c, case2["id"])[0]
-    assert j["status"] == "failed" and "schema violation" in j["error"]["message"]
-    assert c.get(f"/api/v1/statements/{st2['id']}/claims").json()["items"] == []
+    assert j["status"] == "completed" and j["result"]["extraction_method"] == "deterministic_fallback" and "schema violation" in j["result"]["fallback_reason"]
+    assert all(i["extraction_method"] == "deterministic_fallback" for i in c.get(f"/api/v1/statements/{st2['id']}/claims").json()["items"])
 
 
 # ------------------------------------------------------------------------------------------ repair and failure
@@ -206,18 +206,11 @@ def test_two_invalid_outputs_fail_the_extraction_but_keep_the_record_and_manual_
     case = make_case(c)
     _, st = add_statement(c, case["id"])
     j = jobs_of(c, case["id"])[0]
-    assert j["status"] == "failed" and j["error"]["type"] == "ExtractionFailed"
+    assert j["status"] == "completed" and j["result"]["extraction_method"] == "deterministic_fallback" and "ExtractionFailed" in j["result"]["fallback_reason"]
     assert [r[0] for r in sql(c, "select valid from llm_calls order by id")] == [False, False]
-    assert sql(c, "select status from model_runs where stage='extract_claims'")[0][0] == "failed"
-    assert c.get(f"/api/v1/statements/{st['id']}/claims").json()["items"] == []
+    assert sorted(r[0] for r in sql(c, "select status from model_runs where stage='extract_claims'")) == ["completed", "failed"]  # the failed attempt stays on record
+    check_fallback(c, st["id"], STATEMENT)
     assert c.post(f"/api/v1/statements/{st['id']}/claims", json={"char_start": 0, "char_end": 55}).status_code == 201  # manual path still works
-
-    # a failed answer is never replayed from the ledger: retrying calls the model again
-    api.ok(GOOD())
-    before = len(api.requests)
-    assert c.post(f"/api/v1/jobs/{j['id']}/retry").status_code == 202
-    assert len(api.requests) == before + 1
-    assert jobs_of(c, case["id"])[0]["status"] == "completed"
 
 
 # ------------------------------------------------------------------------------------------ policy and configuration
@@ -255,14 +248,90 @@ def test_policy_change_after_the_fact_is_enforced_by_the_client(api, client):
     assert len(api.requests) == 1
 
 
-def test_missing_key_returns_503_and_skips_auto_queue(api):
+FALLBACK_TEXT = "I saw the blue car at 5:40 pm turn left.  The other vehicle was moving very fast!\nIt did not stop. Dr. Lee said so"
+
+
+def check_fallback(c, st_id, original):
+    body = c.get(f"/api/v1/statements/{st_id}/claims").json()
+    assert body["text_original"] == original and body["extraction_run"]["extraction_method"] == "deterministic_fallback"
+    assert body["extraction_run"]["llm_used"] is False
+    items = body["items"]
+    assert items
+    for it in items:
+        e = it["explicit_statement"]
+        assert original[e["char_start"]:e["char_end"]] == e["text"] and e["text"] == e["text"].strip() and e["text"]
+        n = it["normalized_interpretation"]
+        assert it["extraction_method"] == "deterministic_fallback" and it["extraction_status"] == "valid"
+        assert (n["subject"], n["action"], n["direction"], n["time_description"], n["event_type_hint"], n["code_derived_maneuver"]) == (None,) * 6
+        assert n["time_exactness"] == "none" and it["time_placement"].startswith("not_placed")
+    assert c.get(f"/api/v1/statements/{st_id}").json()["text_original"] == original
+    return items
+
+
+def test_missing_key_falls_back_to_deterministic_extraction(api):
     c = api.client
     c.settings.featherless_api_key = None
     case = make_case(c)
-    _, st = add_statement(c, case["id"])
-    assert st["extraction_job"] is None
+    _, st = add_statement(c, case["id"], text_=FALLBACK_TEXT)
+    assert st["extraction_job"] is None  # no auto-queue without a key
     r = c.post(f"/api/v1/statements/{st['id']}/extract")
-    assert r.status_code == 503 and r.json()["error"]["code"] == "LLM_NOT_CONFIGURED" and api.requests == []
+    assert r.status_code == 202 and r.json()["extraction_method"] == "deterministic_fallback" and r.json()["llm_used"] is False
+    assert api.requests == []
+    j = jobs_of(c, case["id"])[0]
+    assert j["status"] == "completed" and j["result"]["llm_used"] is False and j["result"]["extraction_method"] == "deterministic_fallback"
+    items = check_fallback(c, st["id"], FALLBACK_TEXT)
+    assert [i["explicit_statement"]["text"] for i in items] == [
+        "I saw the blue car at 5:40 pm turn left.", "The other vehicle was moving very fast!", "It did not stop.", "Dr. Lee said so"]
+    assert sql(c, "select count(*) from llm_calls")[0][0] == 0
+
+
+def test_consent_gate_still_403_without_key(api):
+    c = api.client
+    c.settings.featherless_api_key = None
+    case = make_case(c, allow=False)
+    _, st = add_statement(c, case["id"])
+    r = c.post(f"/api/v1/statements/{st['id']}/extract")
+    assert r.status_code == 403 and r.json()["error"]["code"] == "EXTERNAL_INFERENCE_DISABLED"
+
+
+def test_featherless_failure_on_explicit_extract_falls_back(api):
+    c = api.client
+    c.settings.featherless_api_key = None
+    case = make_case(c)
+    _, st = add_statement(c, case["id"], text_=FALLBACK_TEXT)
+    c.settings.featherless_api_key = SecretStr(KEY)
+    for _ in range(3):
+        api.status(503)
+    r = c.post(f"/api/v1/statements/{st['id']}/extract")
+    assert r.status_code == 202
+    j = jobs_of(c, case["id"])[0]
+    assert j["status"] == "completed" and j["result"]["extraction_method"] == "deterministic_fallback" and "LlmError" in j["result"]["fallback_reason"]
+    check_fallback(c, st["id"], FALLBACK_TEXT)
+
+
+def test_invalid_output_after_repair_falls_back(api):
+    c = api.client
+    api.ok("not json")
+    api.ok("still not json")
+    case = make_case(c)
+    _, st = add_statement(c, case["id"])
+    j = jobs_of(c, case["id"])[0]
+    assert j["status"] == "completed" and j["result"]["extraction_method"] == "deterministic_fallback"
+    items = check_fallback(c, st["id"], STATEMENT)
+    assert len(items) == 2
+
+
+def test_fallback_spans_are_exact_for_awkward_text():
+    from app.services.witness import split_claim_spans
+    for t in ["  leading and trailing  ", "One. Two?? Three...\n\n  Four", "no punctuation at all", "Said \"stop.\" Then left.", "x"]:
+        spans = split_claim_spans(t)
+        assert spans and all(t[a:b] == t[a:b].strip() and a < b for a, b in spans)
+        assert [t[a:b] for a, b in spans] == [s.strip() for s in spans_text(t, spans)]
+    assert split_claim_spans("   ") == []
+
+
+def spans_text(t, spans):
+    return [t[a:b] for a, b in spans]
 
 
 # ------------------------------------------------------------------------------------------ transport behaviour
@@ -286,7 +355,7 @@ def test_persistent_server_error_is_recorded_and_fails_the_job(api):
     case = make_case(c)
     _, st = add_statement(c, case["id"])
     j = jobs_of(c, case["id"])[0]
-    assert j["status"] == "failed" and j["error"]["type"] == "LlmError" and len(api.requests) == 3
+    assert j["status"] == "completed" and j["result"]["extraction_method"] == "deterministic_fallback" and len(api.requests) == 3
     row = sql(c, "select error, response from llm_calls")[0]
     assert row[0] == "HTTP 503" and row[1] is None  # the attempt is on record
     assert sql(c, "select status from model_runs where stage='extract_claims'")[0][0] == "failed"
@@ -298,7 +367,7 @@ def test_client_errors_are_not_retried(api):
     case = make_case(c)
     add_statement(c, case["id"])
     assert len(api.requests) == 1 and api.sleeps == []
-    assert jobs_of(c, case["id"])[0]["status"] == "failed"
+    assert jobs_of(c, case["id"])[0]["result"]["extraction_method"] == "deterministic_fallback"
 
 
 # ------------------------------------------------------------------------------------------ idempotency, listing

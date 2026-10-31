@@ -135,3 +135,29 @@ def direction_check(model_direction: str | None, derived: str | None) -> str:
     if not said:
         return "not_comparable"
     return "agrees" if said == [derived] else "differs"
+
+
+# ---- deterministic fallback: used when the hosted model is unconfigured or unavailable. No model, no inference.
+FALLBACK_METHOD = "deterministic_fallback"
+FALLBACK_VERSION = "rule-sentences-v1"
+_SENTENCE_END = re.compile(r"[.!?]+[\"')\]]*(?=\s|$)|\n+")
+_ABBREV = re.compile(r"\b(?:mr|mrs|ms|dr|st|no|vs|approx|etc)\.$", re.I)
+
+
+def split_claim_spans(text: str) -> list[tuple[int, int]]:
+    """(start, end) of each sentence in the original text, trimmed of surrounding whitespace; text[start:end] is the exact quote."""
+    spans, start = [], 0
+    for m in _SENTENCE_END.finditer(text):
+        if _ABBREV.search(text[start:m.end()]) and m.group().strip() == ".":
+            continue
+        spans.append((start, m.end()))
+        start = m.end()
+    spans.append((start, len(text)))
+    out = []
+    for a, b in spans:
+        chunk = text[a:b]
+        lead = len(chunk) - len(chunk.lstrip())
+        trail = len(chunk) - len(chunk.rstrip())
+        if a + lead < b - trail:
+            out.append((a + lead, b - trail))
+    return out

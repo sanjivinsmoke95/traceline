@@ -424,18 +424,59 @@ class ExtractionFailed(Exception):
     pass
 
 
-def maybe_enqueue_claims(session: Session, settings: Settings, case: Case, statement: WitnessStatement) -> ProcessingJob | None:
-    """Queue claim extraction only when it can run: the case allows external inference and a key is configured."""
-    if not (case.allow_external_inference and settings.featherless_configured):
+def maybe_enqueue_claims(session: Session, settings: Settings, case: Case, statement: WitnessStatement, explicit: bool = False) -> ProcessingJob | None:
+    """Auto-queue claim extraction only when the case allows external inference and a key is configured.
+    An explicit request is always queued: without a usable model the job falls back to deterministic extraction."""
+    if not case.allow_external_inference or not (explicit or settings.featherless_configured):
         return None
     return enqueue(session, case_id=case.id, evidence_id=statement.evidence_id, stage=STAGE_CLAIMS,
                    input_hash=hashlib.sha256(statement.text_original.encode()).hexdigest(), params={"statement_id": statement.id})
+
+
+def store_fallback_claims(session: Session, case: Case, st: WitnessStatement, reason: str) -> dict:
+    """Rule-based sentence claims with exact spans of the immutable statement; nothing is interpreted, dated or linked to evidence."""
+    text = st.text_original
+    text_hash = hashlib.sha256(text.encode()).hexdigest()
+    rp = {"method": wit.FALLBACK_METHOD, "version": wit.FALLBACK_VERSION}
+    run = ModelRun(case_id=case.id, stage=STAGE_CLAIMS, model_id=wit.FALLBACK_METHOD, model_version=wit.FALLBACK_VERSION, params=rp,
+                   params_hash=params_hash(rp), input_sha256=text_hash, device="local", started_at=_now(), status="running")
+    session.add(run)
+    session.flush()
+    stored = 0
+    for a, b in wit.split_claim_spans(text):
+        quote = text[a:b]
+        session.add(WitnessClaim(statement_id=st.id, model_run_id=run.id, char_start=a, char_end=b, source_text=quote, subject=None, action=None,
+                                 direction=None, time_description=None, certainty="reported_as_direct_observation", extraction_status="valid",
+                                 normalized={"location": None, "time_exactness": "none", "hedges": [], "event_type_hint": None,
+                                             "interpretation_by": wit.FALLBACK_METHOD, "extraction_method": wit.FALLBACK_METHOD,
+                                             "code_derived_maneuver": None, "direction_check": "not_comparable"}))
+        stored += 1
+    info = {"extraction_method": wit.FALLBACK_METHOD, "llm_used": False, "fallback_reason": reason[:300], "claims_stored": stored,
+            "model_run_id": run.id}
+    run.metrics, run.status, run.finished_at = info, "completed", _now()
+    audit.record(session, actor="system", action="claims_extracted_fallback", case_id=case.id, target_type="statement", target_id=st.id, details=info)
+    return info
 
 
 def handle_extract_claims(session: Session, settings: Settings, job: ProcessingJob) -> str | None:
     st = session.get(WitnessStatement, (job.params or {}).get("statement_id"))
     if st is None:
         raise LookupError("statement not found")
+    if not settings.featherless_configured:
+        case = session.get(Case, session.get(Witness, st.witness_id).case_id)
+        job.result = store_fallback_claims(session, case, st, "FEATHERLESS_API_KEY is not configured")
+        return None
+    try:
+        return _extract_with_llm(session, settings, job, st)
+    except (featherless.LlmError, featherless.NotConfigured, ExtractionFailed) as exc:
+        session.rollback()
+        st = session.get(WitnessStatement, st.id)
+        case = session.get(Case, session.get(Witness, st.witness_id).case_id)
+        job.result = store_fallback_claims(session, case, st, f"{type(exc).__name__}: {exc}")
+        return None
+
+
+def _extract_with_llm(session: Session, settings: Settings, job: ProcessingJob, st: WitnessStatement) -> str | None:
     witness = session.get(Witness, st.witness_id)
     case = session.get(Case, witness.case_id)
     text = st.text_original
