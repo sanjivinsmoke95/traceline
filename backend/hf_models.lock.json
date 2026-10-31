@@ -1,0 +1,12 @@
+{
+  "_note": "Pinned Hugging Face models (safetensors only, never trust_remote_code). Separate from models.lock.json, which describes local weight files with SHA-256 hashes.",
+  "accident_detr": {
+    "repo": "hilmantm/detr-traffic-accident-detection",
+    "revision": "38c6660dd2563da5eaf8ba62481b78ebec2fd5d6",
+    "kind": "accident_cue",
+    "format": "safetensors",
+    "licence": "Apache-2.0 (model card)",
+    "classes": "accident, accident, vehicle (only 'accident' is used)",
+    "known_limits": "whole-frame accident-scene detector; boxes persist after impact; model card notes weakness in traffic jams; no accuracy figures published; measured only on six development clips (docs/COLLISION_DETECTION.md)"
+  }
+}

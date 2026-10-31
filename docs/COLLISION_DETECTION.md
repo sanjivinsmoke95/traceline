@@ -44,3 +44,13 @@ labelled collision/non-collision pairs (e.g. the ACCIDENT, CADP or DoTA datasets
 Colab work on branch `colab-ml-model`.
 
 Existing cases keep the events stored by v2 until their analysis is re-run (`VIDEO_EVENTS_VERSION` is now "3").
+
+## DETR accident-scene cue (default cue model)
+`hilmantm/detr-traffic-accident-detection` (Apache-2.0, safetensors, revision pinned in `backend/hf_models.lock.json`) now supplies the accident cue
+(`ACCIDENT_BACKEND=detr`; `yolo` keeps the old cue model). It looks at a whole frame and boxes what it takes to be an accident scene, so a sustained,
+confident cue (>= 3 sampled frames within 1.2 s, peak >= 0.75) becomes a `possible_collision` event with `rule_id` VID-SCENE-01, no tracks, and
+`scene_cue` observations. It says the footage looks like an accident, not which vehicles touched or the exact moment: its cue keeps firing on the wreckage.
+Measured with `scripts/eval_detr_cue.py` on the six labelled development clips: real crashes peak at 0.88-0.97, the one false cue at 0.71 (hence 0.75, tuned on
+these clips); 5 of 6 labelled windows are covered by the scene cue alone, 0 false flags; the motorcycle fall on the highway clip is missed by DETR (caught only by
+the motion rules). The model card notes a weakness in traffic jams and publishes no accuracy figures. Not a benchmark.
+Existing cases keep their stored events until analysis is re-run; restart the backend to load the new code.

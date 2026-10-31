@@ -214,3 +214,23 @@ def test_leave_reason_distinguishes_a_missed_detection_from_the_frame_border():
     assert of(gen([bordered]), "vehicle_leaves_scene")[0]["observations"]["end_reason"] == "frame_border"
     assert of(gen([lost]), "vehicle_leaves_scene")[0]["observations"]["end_reason"] == "missed_detection"
     assert "not a confirmed exit" in of(gen([bordered]), "vehicle_leaves_scene")[0]["observations"]["note"]
+
+
+def test_confident_sustained_scene_cue_raises_a_possible_accident_without_tracks():
+    cue = [(t, [10, 10, 200, 150], c, i) for i, (t, c) in enumerate([(1000, 0.8), (1200, 0.9), (1400, 0.88), (1600, 0.7)])]
+    ev = gen([track(1, "car", lambda k: (50 + 25 * k, 200), 40)], dur=8000, cue_boxes=cue, overrides={"scene_cue_min_peak": 0.75})
+    scene = [e for e in of(ev, "possible_collision") if e["rule_id"] == "VID-SCENE-01"]
+    assert len(scene) == 1
+    o = scene[0]["observations"]
+    assert scene[0]["t_start_ms"] == 1000 and o["scene_cue"]["strength"] == "strong" and o["track_ids"] == [] and o["motion_analysis_agrees"] is False
+    assert "does not show" in o["note"]
+
+
+def test_weak_or_brief_scene_cues_raise_nothing():
+    ov = {"scene_cue_min_peak": 0.75}
+    brief = [(1000, [0, 0, 9, 9], 0.9, 0), (1200, [0, 0, 9, 9], 0.9, 1)]
+    weak = [(t, [0, 0, 9, 9], 0.6, i) for i, t in enumerate(range(1000, 2000, 200))]
+    for cues in (brief, weak):
+        assert [e for e in gen([], dur=8000, cue_boxes=cues, overrides=ov) if e["rule_id"] == "VID-SCENE-01"] == []
+    # and without the DETR switch (the weak YOLO cue) a cue never creates an event by itself
+    assert [e for e in gen([], dur=8000, cue_boxes=[(t, [0, 0, 9, 9], 0.99, i) for i, t in enumerate(range(1000, 2000, 200))]) if e["rule_id"] == "VID-SCENE-01"] == []

@@ -59,7 +59,7 @@ export function MomentBar({ moment }) {
     <div role="status" aria-label="Accident moment" className={`mb-2 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-1.5 ${near ? 'border-danger bg-danger/15' : 'border-danger/40 bg-danger/5'}`}>
       <AlertTriangle className="h-4 w-4 text-danger" aria-hidden />
       <span className="t-small font-medium text-fg">{near ? 'You are at the possible accident moment' : momentLabel(moment)}</span>
-      <span className="t-caption text-fg-3">{momentBasis(moment)} · not confirmed contact</span>
+      <span className="t-caption text-fg-3">Not confirmed</span>
       <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { const st = useWorkspace.getState(); st.setPlaying(false); st.requestSeek(moment.ms); }}>Go to moment</Button>
     </div>
   );

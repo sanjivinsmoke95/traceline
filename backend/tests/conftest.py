@@ -72,7 +72,8 @@ def client(engine, tmp_path):
     factory = sessionmaker(bind=engine, expire_on_commit=False, future=True)
     real = settings_dep()
     settings = real.model_copy(update={"storage_root": tmp_path / "store", "max_video_mb": 5, "max_other_mb": 1,
-                                       "models_dir": real.models_path})  # pinned weights are shared, read-only
+                                       "models_dir": real.models_path,
+                                       "accident_backend": "yolo"})  # pinned weights are shared, read-only; the DETR cue (a ~160 MB download) is tested separately with a stub
 
     def db_dep():
         with factory() as s:

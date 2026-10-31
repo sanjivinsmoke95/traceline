@@ -5,7 +5,8 @@ import { formatTime } from './time';
 const COLL = new Set(['possible_collision']);
 const secs = (ms) => `${(ms / 1000).toFixed(1)} s`;
 
-const dropOf = (e) => Math.max(0, ...((e.observations?.abrupt_speed_changes || []).map((c) => (c.relative_speed_before > 0 ? (c.relative_speed_before - c.relative_speed_after) / c.relative_speed_before : 0))));
+const sceneScore = (e) => (e.observations?.scene_cue ? (e.observations.scene_cue.strength === 'strong' ? 1 : 0.5) : 0) + (e.observations?.collision_signals?.length || 0) * 0.2;
+const dropOf = (e) => sceneScore(e) + Math.max(0, ...((e.observations?.abrupt_speed_changes || []).map((c) => (c.relative_speed_before > 0 ? (c.relative_speed_before - c.relative_speed_after) / c.relative_speed_before : 0))));
 
 /** events: placed timeline events; crbs: corroborations. Returns null when nothing in the stored data points to a moment. */
 export function pickMoment(events = [], crbs = []) {

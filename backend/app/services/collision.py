@@ -122,7 +122,8 @@ def assess(pa: dict, pb: dict, t_contact_ms: float, t_end_ms: float, cue_boxes: 
     if cue_boxes:
         lo, hi = t_contact_ms - p["cue_pad_ms"], t_end_ms + p["cue_pad_ms"]
         hits = set()
-        for (ct, cb, _conf) in cue_boxes:
+        for cb_item in cue_boxes:
+            ct, cb = cb_item[0], cb_item[1]
             if not lo <= ct <= hi:
                 continue
             f = min(s["frames"], key=lambda ff: abs(pa[ff]["time_ms"] - ct))

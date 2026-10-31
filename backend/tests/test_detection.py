@@ -9,8 +9,10 @@ import zipfile
 import cv2
 import numpy as np
 import pytest
+from sqlalchemy import select
 
 from app.eval.detection_metrics import ap50, average_precision, iou, match, precision_recall_at
+from app.models import Detection, ModelRun
 from app.services import weights
 from app.services.detection import COCO_KEEP
 from tests.conftest import MODELS, needs_accident, needs_weights
@@ -237,3 +239,36 @@ def test_detect_rerun_is_idempotent_and_filters_work(client, bus_video):
     assert all(1000 <= f["time_ms"] <= 2000 for f in window["items"])
     buses = client.get(f"/api/v1/evidence/{eid}/detections?classes=bus").json()
     assert {d["class"] for f in buses["items"] for d in f["detections"]} == {"bus"}
+
+
+def test_detr_accident_cue_failure_is_partial_not_fatal(client, bus_video, monkeypatch):
+    """The DETR cue is optional: if it cannot load, the detector result is still stored and the job is partially completed."""
+    from app.services import accident_detr
+
+    def boom(*a, **k):
+        raise OSError("model not available offline")
+    monkeypatch.setattr(accident_detr.AccidentDetr, "load", classmethod(lambda cls, *a, **k: boom()))
+    client.settings.accident_backend = "detr"
+    case = make_case(client)
+    upload(client, case["id"], bus_video)
+    job = stage_jobs(client, case["id"], "detect")[0]
+    assert job["status"] == "partially_completed"
+    assert "skipped" in job["result"]["accident_cue"] and job["result"]["detector"]["boxes"] > 0
+
+
+def test_detr_accident_cue_runs_with_a_stub_and_is_stored_as_cue_boxes(client, bus_video, monkeypatch):
+    from app.services import accident_detr
+
+    class Stub:
+        def accident_boxes(self, image, conf):
+            return [(0.9, [5.0, 5.0, 60.0, 60.0])]
+    monkeypatch.setattr(accident_detr.AccidentDetr, "load", classmethod(lambda cls, *a, **k: Stub()))
+    client.settings.accident_backend = "detr"
+    case = make_case(client)
+    upload(client, case["id"], bus_video)
+    job = stage_jobs(client, case["id"], "detect")[0]
+    assert job["status"] == "completed" and job["result"]["accident_cue"]["boxes"] == job["result"]["frames"]
+    with client.factory() as s:
+        run = s.execute(select(ModelRun).where(ModelRun.case_id == case["id"], ModelRun.stage == "accident_cue")).scalars().one()
+        assert run.model_id == "accident_detr" and run.model_version.startswith("revision:")
+        assert s.execute(select(Detection).where(Detection.model_run_id == run.id, Detection.is_accident_cue.is_(True))).scalars().first() is not None

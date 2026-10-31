@@ -80,6 +80,7 @@ def preprocess_params(settings: Settings, sample_fps: float | None = None, max_f
 def detect_params(settings: Settings) -> dict:
     return {"detector": settings.detector_model, "imgsz": settings.detector_imgsz, "conf": settings.detector_conf,
             "accident": settings.accident_model or None, "accident_conf": settings.accident_conf, "frames": "sampled",
+            "accident_backend": settings.accident_backend, "accident_detr_conf": settings.accident_detr_conf,
             "version": detection.DETECTION_VERSION}
 
 
@@ -275,7 +276,10 @@ def handle_detect(session: Session, settings: Settings, job: ProcessingJob) -> s
     by_no = {f.frame_no: f for f in frames}
     device = detection.pick_device(settings.detector_device)
     passes = [("detector", STAGE_DETECT, p["detector"], detection.COCO_KEEP, p["conf"])]
-    if p.get("accident"):
+    backend = p.get("accident_backend", "yolo")
+    if backend == "detr":
+        passes.append(("accident_cue", "accident_cue", "accident_detr", None, p.get("accident_detr_conf", 0.48)))
+    elif p.get("accident"):
         passes.append(("accident_cue", "accident_cue", p["accident"], detection.ACCIDENT_KEEP, p["accident_conf"]))
 
     import ultralytics
@@ -293,16 +297,27 @@ def handle_detect(session: Session, settings: Settings, job: ProcessingJob) -> s
             result[role] = {"reused_model_run": prior.id}
             publish_progress((pass_i + 1) / n_passes)
             continue
-        try:
-            model, entry = load_yolo(name, str(settings.models_path))
-        except (UnsafeWeights, FileNotFoundError) as exc:
-            if role == "detector":
-                raise
-            result[role] = {"skipped": str(exc)}
-            result["warnings"].append(f"accident cue not run: {exc}")
-            partial = True
-            continue
-        run = ModelRun(case_id=ev.case_id, stage=stage, model_id=name, model_version=f"sha256:{entry['sha256'][:12]}; ultralytics {ultralytics.__version__}",
+        if name == "accident_detr":
+            try:
+                from app.services.accident_detr import AccidentDetr, pinned_revision
+                model = AccidentDetr.load(cache_dir=str(settings.models_path / "hf"))
+                entry = {"sha256": pinned_revision()}  # the pinned Hugging Face revision stands in for a file hash
+            except Exception as exc:  # noqa: BLE001 - the cue is optional; the detector result must still be saved
+                result[role] = {"skipped": f"{type(exc).__name__}: {exc}"[:200]}
+                result["warnings"].append(f"accident cue not run: {exc}")
+                partial = True
+                continue
+        else:
+            try:
+                model, entry = load_yolo(name, str(settings.models_path))
+            except (UnsafeWeights, FileNotFoundError) as exc:
+                if role == "detector":
+                    raise
+                result[role] = {"skipped": str(exc)}
+                result["warnings"].append(f"accident cue not run: {exc}")
+                partial = True
+                continue
+        run = ModelRun(case_id=ev.case_id, stage=stage, model_id=name, model_version=(f"revision:{entry['sha256'][:12]}; transformers" if name == "accident_detr" else f"sha256:{entry['sha256'][:12]}; ultralytics {ultralytics.__version__}"),
                        params=rp, params_hash=ph, input_sha256=ev.sha256, device=device, started_at=_now(), status="running")
         session.add(run)
         session.flush()
@@ -313,8 +328,11 @@ def handle_detect(session: Session, settings: Settings, job: ProcessingJob) -> s
             if n_frames:
                 publish_progress((pass_i + done / n_frames) / n_passes)
 
-        for idx, boxes in detection.detect_stream(vid.iter_frames(path, set(by_no), vm.rotation if vm else None), model, imgsz=p["imgsz"], conf=conf,
-                                                   device=device, keep=keep, stats=stats, progress=_inferred):
+        stream = (detection.detect_detr_stream(vid.iter_frames(path, set(by_no), vm.rotation if vm else None), model, conf=conf, stats=stats, progress=_inferred)
+                  if name == "accident_detr" else
+                  detection.detect_stream(vid.iter_frames(path, set(by_no), vm.rotation if vm else None), model, imgsz=p["imgsz"], conf=conf,
+                                          device=device, keep=keep, stats=stats, progress=_inferred))
+        for idx, boxes in stream:
             for b in boxes:
                 by_class[b.class_name] = by_class.get(b.class_name, 0) + 1
                 rows.append({"frame_id": by_no[idx].id, "model_run_id": run.id, "class_name": b.class_name, "confidence": b.confidence,
@@ -388,17 +406,21 @@ def handle_track(session: Session, settings: Settings, job: ProcessingJob) -> st
                                                                "continuation_candidates": [c for c in cands if t["track_id"] in (c["from_track"], c["to_track"])]}))
     # candidate events from the tracks (source media time); the accident cue is passed only as a weak note
     cue_run = _latest_run(session, ev, "accident_cue")
-    cues = []
+    cues, cue_boxes, overrides = [], [], {}
     if cue_run is not None:
-        cues = [(f.time_ms, d.confidence) for d, f in session.execute(
-            select(Detection, ExtractedFrame).join(ExtractedFrame, ExtractedFrame.id == Detection.frame_id)
-            .where(Detection.model_run_id == cue_run.id)).all()]
+        for d, f in session.execute(select(Detection, ExtractedFrame).join(ExtractedFrame, ExtractedFrame.id == Detection.frame_id)
+                                    .where(Detection.model_run_id == cue_run.id)).all():
+            cues.append((f.time_ms, d.confidence))
+            cue_boxes.append((f.time_ms, [d.x1, d.y1, d.x2, d.y2], d.confidence, f.frame_no))
+        if cue_run.model_id == "accident_detr":
+            overrides["scene_cue_min_peak"] = video_events.DETR_SCENE_MIN_PEAK  # a whole-scene cue may raise a possible-accident event by itself
     steps = [b.time_ms - a.time_ms for a, b in zip(ordered, ordered[1:])]
     period_ms = float(statistics.median(steps)) if steps else 1000.0 / fps
     vevents = video_events.generate(
         [{"track_id": t["track_id"], "class": t["class"], "points": t["points"], "continuity": t["continuity"]} for t in tracks],
         kind=ev.kind, period_ms=period_ms,
-        video_duration_ms=float(vm.duration_ms) if vm and vm.duration_ms else float(ordered[-1].time_ms if ordered else 0), cues=cues)
+        video_duration_ms=float(vm.duration_ms) if vm and vm.duration_ms else float(ordered[-1].time_ms if ordered else 0), cues=cues,
+        cue_boxes=cue_boxes, overrides=overrides)
     track_pk = {t["track_id"]: None for t in tracks}
     session.flush()
     for e in vevents:

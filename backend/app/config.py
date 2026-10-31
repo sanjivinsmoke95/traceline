@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     detector_conf: float = 0.15             # storage threshold (keep weak boxes for tracking); the API filters for display
     accident_model: str | None = "accident_yolov8s"   # set to empty to disable the accident cue
     accident_conf: float = 0.25
+    # which model supplies the accident cue: "detr" (hilmantm/detr-traffic-accident-detection, pinned in models.lock.json), "yolo" (accident_model above) or "" (none)
+    accident_backend: str = "detr"
+    accident_detr_conf: float = 0.48
     detector_device: str = "auto"           # auto -> mps if available, else cpu
 
     max_video_mb: int = 500

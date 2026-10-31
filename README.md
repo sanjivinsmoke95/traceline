@@ -9,9 +9,10 @@ Already set up? `./run.sh` starts the API and the web app together, then open ht
 
 First-time setup:
 ```bash
+cp .env.example .env                                                        # in the REPO ROOT (not backend/): set DATABASE_URL (PostgreSQL 16); FEATHERLESS_API_KEY is optional
 cd backend
 python3.11 -m venv .venv && ./.venv/bin/pip install -r requirements.txt     # once
-cp .env.example .env                                                        # set DATABASE_URL (PostgreSQL 16); FEATHERLESS_API_KEY is optional
+./.venv/bin/pip install -r requirements-vision.txt                          # detection/tracking and the DETR accident cue (needed for real footage)
 ./.venv/bin/alembic upgrade head
 ./.venv/bin/python scripts/fetch_models.py                                  # optional: detector weights (only needed for real footage)
 ./.venv/bin/python scripts/build_scenarios.py                               # render the four synthetic scenarios

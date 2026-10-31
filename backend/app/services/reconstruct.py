@@ -47,6 +47,8 @@ def _now():
 
 def _title(et: str, actor_label: str | None, obs: dict) -> str:
     a = actor_label or "A tracked vehicle"
+    if et == "possible_collision" and obs.get("relation") == "accident_scene_cue":
+        return "Possible accident: the scene looks like an accident (model cue)"
     m = {"left": "turn left", "right": "turn right", "straight": "continue straight"}.get(obs.get("maneuver"), "move")
     return TITLES.get(et, et.replace("_", " ").capitalize() + (f" ({a})" if actor_label else "")).format(a=a, m=m)[:240]
 

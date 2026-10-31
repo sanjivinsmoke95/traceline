@@ -7,6 +7,20 @@ import { ClassBadge, EvidenceLine, FindingRow } from './FindingParts';
 import IncidentMoment from './IncidentMoment';
 import { useWorkspace } from '../store';
 
+const TONE = { alert: 'border-l-danger', neutral: 'border-l-line' };
+
+/** One headline, up to three plain lines, one caveat, and the two actions a reader needs. */
+function Brief({ brief, onGo }) {
+  return (
+    <div className={`rounded-xl border border-line border-l-4 ${TONE[brief.tone]} bg-surface p-4`}>
+      <p className="text-[1.0625rem] font-semibold leading-snug text-fg">{brief.headline}</p>
+      {brief.lines.length > 0 && <ul className="mt-2 space-y-1">{brief.lines.map((l, i) => <li key={i} className="t-small text-fg-2">{l}</li>)}</ul>}
+      <p className="t-caption mt-2 text-fg-3">{brief.caveat}</p>
+      {brief.ms != null && <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="primary" icon={Play} onClick={() => onGo(Math.max(0, brief.ms - 1500), true)}>Play 1.5 s before</Button><Button size="sm" variant="outline" icon={Crosshair} onClick={() => onGo(brief.ms, false)}>Go to moment</Button></div>}
+    </div>
+  );
+}
+
 const Stat = ({ label, value }) => (
   <div className="rounded-lg border border-line bg-surface-2/40 px-3 py-2"><div className="font-display text-xl leading-none tabular-nums">{value}</div><div className="t-caption mt-1 text-fg-3">{label}</div></div>
 );
@@ -35,7 +49,7 @@ function Factor({ f, events, onPick, onOpenTrail }) {
 
 /** The default inspector view: what happened, the factors behind it (each expandable to its evidence), who may be involved, what is unknown and what to do next.
  *  Raw detections, tracks, scores and counts are folded under Technical details. Built from stored records; no model writes any of it. */
-export default function Overview({ model, executive, moment, motions, events, designation, activeId, nameOf = (x) => x, onSelectFinding, onSeeAll, onPick, onOpenTrail, onTechnical }) {
+export default function Overview({ brief, model, executive, moment, motions, events, designation, activeId, nameOf = (x) => x, onSelectFinding, onSeeAll, onPick, onOpenTrail, onTechnical }) {
   const { overview: o } = model;
   const x = executive;
   const a = o.analysis;
@@ -46,12 +60,14 @@ export default function Overview({ model, executive, moment, motions, events, de
     <div className="space-y-6" aria-label="Investigation overview">
       <section aria-label="What happened">
         <H>What happened?</H>
-        {x ? <div className="space-y-2">{x.sentences.map((t, i) => <p key={i} className={i === 0 ? 'text-[1.0625rem] leading-7 text-fg' : 't-small text-fg-2'}>{t}</p>)}</div> : <p className="t-small text-fg-3">{o.headline}</p>}
-        {moment && <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="outline" icon={Crosshair} onClick={() => go(moment.ms, false)}>Go to moment</Button><Button size="sm" variant="primary" icon={Play} onClick={() => go(Math.max(0, moment.ms - 1500), true)}>Play 1.5 s before</Button></div>}
+        {brief ? <Brief brief={brief} onGo={go} /> : (x ? <div className="space-y-2">{x.sentences.map((t, i) => <p key={i} className={i === 0 ? 'text-[1.0625rem] leading-7 text-fg' : 't-small text-fg-2'}>{t}</p>)}</div> : <p className="t-small text-fg-3">{o.headline}</p>)}
         {imported && <Alert variant="warning" className="mt-3" title="Imported boxes, not detector output">The boxes in this case were supplied from outside the detector. Movement and events are real rule output over those boxes, but they do not show how the detector performs on this footage.</Alert>}
         {designation === 'synthetic' && !imported && <p className="t-caption mt-2 text-warning">Synthetic demonstration case.</p>}
       </section>
 
+      <details className="rounded-lg border border-line px-3 py-2" aria-label="More detail" open={!brief}>
+        <summary className="t-small cursor-pointer text-fg-2">More detail: factors, who is involved, what is uncertain, next steps</summary>
+        <div className="mt-4 space-y-6">
       {x && (
         <section aria-label="Contributing factors">
           <H>Factors the evidence points to</H>
@@ -100,6 +116,9 @@ export default function Overview({ model, executive, moment, motions, events, de
         )}
         {o.unreviewed > 0 && <p className="t-caption mt-2 text-fg-3">{o.unreviewed} finding{o.unreviewed > 1 ? 's' : ''} not yet reviewed.</p>}
       </section>
+
+        </div>
+      </details>
 
       <details className="rounded-lg border border-line px-3 py-2" aria-label="Raw analysis data">
         <summary className="t-small cursor-pointer text-fg-2">Raw analysis data</summary>

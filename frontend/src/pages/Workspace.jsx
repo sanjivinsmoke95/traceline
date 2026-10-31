@@ -30,6 +30,7 @@ import { buildExecutive } from '../lib/executive';
 import { useAutoPause, useMotions } from '../hooks';
 import AccidentAlert from '../components/AccidentAlert';
 import IncidentSequence from '../components/IncidentSequence';
+import { buildBrief } from '../lib/brief';
 import CrashCuePanel, { useCueSummaries } from '../components/CrashCue';
 import InvestigationFindings from '../components/InvestigationFindings';
 import { Associations, CameraFilter, EventClocks, EventTrace, HypothesisExplanation, KeyObservations, Overlaps, PhaseInspector, Scenarios, SensorPanelNote, evidenceLabel, sourceName } from '../components/Reconstruction';
@@ -133,6 +134,7 @@ export default function Workspace() {
   const cues = useCueSummaries(videos, data?.runs);
   const keyEvents = useMemo(() => events.filter(isSignificant), [events]);
   const moment = useMemo(() => (data && !data.none ? pickMoment(events, data.crbs) : null), [data, events]);
+  const brief = useMemo(() => (data && !data.none ? buildBrief({ moment, events, gaps: data.gaps || [], nameOf: (id) => sourceName((data.ev || []).find((e) => e.id === id)), cueRan: videos.some((v) => (data.runs?.[v.id] || []).some((r) => r.stage === 'accident_cue' && r.status === 'completed')) }) : null), [data, moment, events, videos]);
   const placedEvents = useMemo(() => events.filter((e) => e.start_ms != null), [events]);
   useAutoPause(placedEvents, `${scenarioId}:${primaryId}`);
   const alertState = useWorkspace((st) => st.alert);
@@ -331,7 +333,7 @@ export default function Workspace() {
             <Panel as="aside" className="order-2 h-fit min-w-0 p-4 xl:sticky xl:top-20 xl:order-3" aria-label="Inspector">
               <div className="-mx-1 overflow-x-auto px-1"><Tabs value={tab} onChange={setTab} label="Inspector" items={[{ id: 'overview', label: 'Overview' }, { id: 'event', label: 'Event' }, { id: 'findings', label: 'Findings', count: model.findings.length }, { id: 'evidence', label: 'Evidence' }, { id: 'technical', label: 'Technical' }]} /></div>
               <div className="mt-4 max-h-[calc(100vh-11rem)] overflow-auto pr-1">
-                {tab === 'overview' && <Overview model={model} executive={executive} moment={moment} motions={motions} events={events} designation={eff.value} activeId={activeId} nameOf={nameOf} onSelectFinding={selectFinding} onSeeAll={() => setTab('findings')} onPick={pick} onOpenTrail={openTrail} onTechnical={() => setTab('technical')} />}
+                {tab === 'overview' && <Overview brief={brief} model={model} executive={executive} moment={moment} motions={motions} events={events} designation={eff.value} activeId={activeId} nameOf={nameOf} onSelectFinding={selectFinding} onSeeAll={() => setTab('findings')} onPick={pick} onOpenTrail={openTrail} onTechnical={() => setTab('technical')} />}
                 {tab === 'event' && <EventTab event={model.events[activeId]} nameOf={nameOf} board={board} />}
                 {tab === 'findings' && (selected
                   ? <FindingDetail f={selected} events={model.events} onPick={pick} onOpenTrail={openTrail} onReview={review} onBack={clearFinding} />

@@ -17,7 +17,10 @@ DEFAULTS = {"moving_rel_speed": 0.5, "stopped_rel_speed": 0.15, "stop_min_s": 1.
             "turn_deg": 30.0, "turn_window_s": 1.6, "min_turn_rel_speed": 0.3, "maneuver_min_path_diag": 3.0,
             "interaction_iou": 0.05, "interaction_gap_diag": 0.08, "near_miss_gap_diag": 0.5, "collision_drop": 0.6,
             "collision_lookahead_s": 0.8, "cue_window_s": 0.5, "cue_min_conf": 0.4, "entry_margin_s": 0.5,
-            "segment_gap_factor": 1.5, "common_slowdown_share": 0.5}
+            "segment_gap_factor": 1.5, "common_slowdown_share": 0.5, "scene_cue_min_peak": None, "scene_cue_min_frames": 3, "scene_cue_gap_ms": 1200, "scene_cue_strong_peak": 0.85}
+
+# separates real crashes (peak 0.88-0.97) from the one false cue (0.71) on the six development clips; tuned on them, not validated
+DETR_SCENE_MIN_PEAK = 0.75
 
 
 def _diag(b) -> float:
@@ -334,4 +337,44 @@ def generate(tracks: list[dict], *, kind: str, period_ms: float, video_duration_
                         obs | evidence | {"relation": "proximity", "abrupt_speed_changes": drops, "accident_cue_nearby": bool(cue_hits),
                                           "accident_cue_note": "the accident-cue model is a weak supporting signal and never decides this event"}, [a, b])
                 k = j + 1
-    return _collapse_overlapping(sorted(out, key=lambda e: (e["t_start_ms"], e["event_type"])), period_ms * p["segment_gap_factor"])
+    out = _collapse_overlapping(sorted(out, key=lambda e: (e["t_start_ms"], e["event_type"])), period_ms * p["segment_gap_factor"])
+    out += _scene_cue_events(cue_boxes or [], out, p, period_ms, moving_cam)
+    return sorted(out, key=lambda e: (e["t_start_ms"], e["event_type"]))
+
+
+def _scene_cue_events(cue_boxes, events, p, period_ms, moving_cam):
+    """A whole-scene accident cue (DETR) that is confident and lasts several sampled frames becomes a possible-accident event with no
+    tracks: the model says the frame looks like an accident scene, not which vehicles touched. It is a cue, never a confirmed collision."""
+    if p["scene_cue_min_peak"] is None or not cue_boxes:
+        return []
+    frames = {}
+    for c in cue_boxes:
+        t, conf, fno = c[0], c[2], (c[3] if len(c) > 3 else None)
+        cur = frames.get(t)
+        if cur is None or conf > cur[0]:
+            frames[t] = (conf, fno)
+    clusters = []
+    for t in sorted(frames):
+        if clusters and t - clusters[-1][-1] <= p["scene_cue_gap_ms"]:
+            clusters[-1].append(t)
+        else:
+            clusters.append([t])
+    out = []
+    for c in clusters:
+        peak = max(frames[t][0] for t in c)
+        if len(c) < p["scene_cue_min_frames"] or peak < p["scene_cue_min_peak"]:
+            continue
+        # the moment the cue first appears is the best estimate of when the scene began to look like an accident; the cue keeps firing on the wreckage
+        t0, t1 = c[0], c[-1]
+        motion = [e for e in events if e["event_type"] == "possible_collision" and e["t_end_ms"] >= t0 - 1000 and e["t_start_ms"] <= t1 + 1000]
+        out.append({
+            "event_type": "possible_collision", "rule_id": "VID-SCENE-01", "category": "machine_detection", "t_start_ms": t0, "t_end_ms": t1,
+            "uncertainty_ms": period_ms / 2,
+            "observations": {"relation": "accident_scene_cue", "track_ids": [], "coordinate_frame": "image_pixels", "relative_to_moving_camera": moving_cam,
+                             "scene_cue": {"model": "accident_detr", "peak_confidence": round(float(peak), 2), "frames": len(c), "first_ms": t0, "last_ms": t1,
+                                           "strength": "strong" if peak >= p["scene_cue_strong_peak"] else "moderate"},
+                             "motion_analysis_agrees": bool(motion),
+                             "note": "the model flags frames that look like an accident scene; it does not show which vehicles touched or the exact moment of contact"},
+            "source_ref": {"kind": "video_frames", "frames": [frames[t0][1], frames[t1][1]], "frame_times_ms": [t0, t1]},
+            "entity_hint": {"tracks": []}})
+    return out

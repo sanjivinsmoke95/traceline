@@ -28,6 +28,7 @@ _OBS_KEYS = (
     "abrupt_speed_changes", "relative_speed_before", "relative_speed_after", "drop",
     "motion", "end_reason", "note", "coordinate_frame", "relative_to_moving_camera",
     "accident_cue_nearby", "accident_cue_note", "unit",
+    "scene_cue", "motion_analysis_agrees", "collision_signals", "collision_score",
 )
 _ITEM_KEYS = (
     "id", "event_type", "classification", "measurement_classification", "title",
@@ -243,7 +244,14 @@ def deterministic_summary(items: list[dict], unplaced: list[dict], gaps: list[di
             ))
             continue
         ev = [item["evidence_id"]]
-        if item["event_type"] == "possible_collision":
+        if item["event_type"] == "possible_collision" and (item.get("observations") or {}).get("relation") == "accident_scene_cue":
+            sc = item["observations"].get("scene_cue") or {}
+            sentences.append(_sentence(
+                f"A possible collision ({item['id']}) was flagged because the accident-scene model reported an accident over {sc.get('frames', 'several')} sampled "
+                f"frames (peak {round(100 * sc.get('peak_confidence', 0))}%). It does not show which vehicles touched. Contact is not confirmed.",
+                "inferred", [item["id"]], ev,
+            ))
+        elif item["event_type"] == "possible_collision":
             sentences.append(_sentence(
                 f"A possible collision ({item['id']}) was recorded from image-space boxes and a speed drop. Contact is not confirmed.",
                 "inferred", [item["id"]], ev,

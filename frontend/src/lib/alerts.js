@@ -6,7 +6,7 @@
 export const RANK = { info: 0, attention: 1, accident: 2 };
 export const TIER_LABEL = { info: 'Informational', attention: 'Attention', accident: 'Possible accident' };
 export const DEFAULT_POLICY = { autoPause: true, minTier: 'accident', cooldownMs: 3000 };
-const STRONG = (e) => (e.observations?.abrupt_speed_changes?.length || 0) > 0;
+const STRONG = (e) => (e.observations?.abrupt_speed_changes?.length || 0) > 0 || e.observations?.scene_cue?.strength === 'strong' || (!!e.observations?.scene_cue && !!e.observations?.motion_analysis_agrees);
 
 export function tierOf(e) {
   if (e.category === 'inference' || e.start_ms == null) return 'info';
@@ -71,6 +71,7 @@ export function supportingObservations(e, nearby = []) {
   (o.abrupt_speed_changes || []).forEach((c) => lines.push(`Track #${c.track_id}: movement pace fell from ${c.relative_speed_before?.toFixed?.(2)} to ${c.relative_speed_after?.toFixed?.(2)} (image space)`));
   const SIGNAL = { approach: 'the two objects closed on each other quickly', arrest: 'their relative motion was stopped or deflected right after contact', rest: 'they stayed together afterwards',
     shape: 'one object changed shape abruptly (rolled, flipped or fell)', cue: 'the weak crash-cue model fired on the pair over several frames' };
+  if (o.scene_cue) lines.push(`The accident-scene model flagged ${o.scene_cue.frames} frames in a row (peak ${Math.round(100 * o.scene_cue.peak_confidence)}%). It does not show which vehicles touched.`);
   if (o.collision_signals?.length) lines.push(`Why it was flagged: ${o.collision_signals.map((k) => SIGNAL[k] || k).join('; ')}`);
   if (o.min_gap_in_diagonals != null) lines.push(`Closest approach in the image: ${o.min_gap_in_diagonals} vehicle diagonals`);
   if (o.max_box_overlap_iou != null) lines.push(`Largest box overlap: ${o.max_box_overlap_iou} (image-space overlap is not contact)`);
@@ -97,6 +98,7 @@ const EXPLAIN = {
 /** One plain sentence for a timeline card, from the event type; witness claims show their own quote. */
 export function explainEvent(e) {
   if (e.category === 'witness_claim') return e.observations?.quote ? `Witness says: “${e.observations.quote}”` : 'A witness statement.';
+  if (e.observations?.scene_cue) return 'The accident-scene model flagged this part of the footage. It does not show which vehicles touched.';
   if (e.event_type === 'possible_collision' && !(e.observations?.abrupt_speed_changes?.length)) return 'Paths overlap in the image, but no abrupt movement change supports it: a weak cue.';
   return EXPLAIN[e.event_type] || e.title;
 }

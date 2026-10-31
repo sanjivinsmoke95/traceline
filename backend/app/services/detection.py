@@ -82,3 +82,20 @@ def detect_stream(frames, model, *, imgsz: int, conf: float, device: str, keep: 
     if buf_img:
         yield from flush()
     stats["ms_per_frame"] = round(1000 * stats["seconds"] / stats["frames"], 2) if stats["frames"] else None
+
+
+def detect_detr_stream(frames, model, *, conf: float, stats: dict, progress=None):
+    """Like detect_stream for the DETR accident-scene model: yields (frame_index, [Box]) with class 'accident_cue'. One frame at a time."""
+    import cv2
+    from PIL import Image
+    stats.update({"frames": 0, "boxes": 0, "dropped_other_classes": 0, "seconds": 0.0})
+    for i, img in frames:
+        t0 = time.perf_counter()
+        found = model.accident_boxes(Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)), conf)
+        stats["seconds"] += time.perf_counter() - t0
+        stats["frames"] += 1
+        stats["boxes"] += len(found)
+        yield i, [Box(class_name="accident_cue", confidence=c, x1=b[0], y1=b[1], x2=b[2], y2=b[3]) for c, b in found]
+        if progress is not None and stats["frames"] % 8 == 0:
+            progress(stats["frames"])
+    stats["ms_per_frame"] = round(1000 * stats["seconds"] / max(stats["frames"], 1), 2)

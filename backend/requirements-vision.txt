@@ -6,3 +6,6 @@ torchvision==0.29.2+cpu
 ultralytics==8.4.193
 trackers==2.6.1
 supervision==0.31.3
+transformers>=4.45        # DETR accident-scene cue (hilmantm/detr-traffic-accident-detection,  pinned revision in hf_models.lock.json)
+timm>=1.0                 # ResNet backbone that model needs
+huggingface_hub>=0.25
