@@ -69,6 +69,9 @@ export function supportingObservations(e, nearby = []) {
   const o = e.observations || {};
   const lines = [];
   (o.abrupt_speed_changes || []).forEach((c) => lines.push(`Track #${c.track_id}: movement pace fell from ${c.relative_speed_before?.toFixed?.(2)} to ${c.relative_speed_after?.toFixed?.(2)} (image space)`));
+  const SIGNAL = { approach: 'the two objects closed on each other quickly', arrest: 'their relative motion was stopped or deflected right after contact', rest: 'they stayed together afterwards',
+    shape: 'one object changed shape abruptly (rolled, flipped or fell)', cue: 'the weak crash-cue model fired on the pair over several frames' };
+  if (o.collision_signals?.length) lines.push(`Why it was flagged: ${o.collision_signals.map((k) => SIGNAL[k] || k).join('; ')}`);
   if (o.min_gap_in_diagonals != null) lines.push(`Closest approach in the image: ${o.min_gap_in_diagonals} vehicle diagonals`);
   if (o.max_box_overlap_iou != null) lines.push(`Largest box overlap: ${o.max_box_overlap_iou} (image-space overlap is not contact)`);
   nearby.forEach((n) => lines.push(`${n.title}`));

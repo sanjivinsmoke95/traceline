@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_POLICY, advance, alertText, buildTriggers, createTriggerState, explainEvent, tierOf } from './alerts';
+import { DEFAULT_POLICY, advance, alertText, buildTriggers, createTriggerState, explainEvent, supportingObservations, tierOf } from './alerts';
 
 const E = (id, type, ms, extra = {}) => ({ id, event_type: type, category: 'machine_detection', start_ms: ms, end_ms: ms, uncertainty_ms: 100, source_type: 'video_cctv', source_id: 'ev1', title: `${type} ${id}`, observations: {}, ...extra });
 const strong = (id, ms, drop = 0.6) => E(id, 'possible_collision', ms, { observations: { abrupt_speed_changes: [{ track_id: 3, relative_speed_before: 1, relative_speed_after: 1 - drop }] } });
@@ -87,5 +87,12 @@ describe('alert text', () => {
     }
     expect(alertText(strong('a', 1))).toMatch(/abrupt movement change/);
     expect(explainEvent(E('w', 'possible_collision', 1))).toMatch(/weak cue/);
+  });
+});
+
+describe('collision signals', () => {
+  it('lists why a possible collision was flagged, in plain words', () => {
+    const lines = supportingObservations({ observations: { collision_signals: ['approach', 'arrest', 'cue'] } });
+    expect(lines.join(' ')).toMatch(/closed on each other quickly.*stopped or deflected.*weak crash-cue/);
   });
 });
