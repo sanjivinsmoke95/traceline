@@ -144,7 +144,6 @@ export default function NewCase() {
             {(c.counts?.evidence_total ?? 0) > 0 && <Button variant="outline" onClick={() => setStep(2)}>Continue to processing</Button>}
           </div>
         ) : (<>{dups.length > 0 && <Alert variant="info" className="mb-4" title="Already in this case">{dups.join(', ')} {dups.length === 1 ? 'was' : 'were'} already in this case and was not added again. Identical files are not counted as separate corroboration.</Alert>}<Processing c={c} /></>)}
-        <p className="t-caption mt-4 text-fg-3">A single video is its own clock. With several videos, state each start time and its uncertainty, or record how their clocks relate, before they are compared.</p>
       </div>
     </Shell>
   );
