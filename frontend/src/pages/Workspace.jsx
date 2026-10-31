@@ -303,9 +303,9 @@ export default function Workspace() {
         <ErrorState title="No reconstruction yet" description="The pipeline has not produced a reconstruction for this case. Open the dashboard to check processing jobs." />
       ) : (
         <>
-          <div className={`grid grid-cols-[minmax(0,1fr)] gap-4 [@media(max-height:1100px)]:h-[calc(100dvh-9.5rem)] [@media(max-height:1100px)]:min-h-0 [@media(max-height:1100px)]:overflow-hidden ${navOpen ? 'xl:grid-cols-[250px_minmax(0,1fr)_420px]' : 'xl:grid-cols-[minmax(0,1fr)_420px]'}`}>
+          <div className={`grid grid-cols-[minmax(0,1fr)] gap-4 [@media(max-height:1100px)]:h-[calc(100dvh-9.5rem)] [@media(max-height:1100px)]:min-h-0 [@media(max-height:1100px)]:overflow-hidden ${navOpen ? 'xl:grid-cols-[250px_minmax(0,1fr)_440px]' : 'xl:grid-cols-[minmax(0,1fr)_440px]'}`}>
             <div className="order-1 min-w-0 space-y-4 xl:order-2 [@media(max-height:1100px)]:flex [@media(max-height:1100px)]:h-full [@media(max-height:1100px)]:min-h-0 [@media(max-height:1100px)]:flex-col [@media(max-height:1100px)]:gap-3 [@media(max-height:1100px)]:space-y-0 [@media(max-height:1100px)]:overflow-hidden">
-              <Panel as="section" className="p-3 [@media(max-height:1100px)]:min-h-0 [@media(max-height:1100px)]:flex-1 [@media(max-height:1100px)]:overflow-y-auto" aria-label="Evidence video">
+              <Panel as="section" className="p-3 [@media(max-height:1100px)]:max-h-[55%] [@media(max-height:1100px)]:shrink-0 [@media(max-height:1100px)]:overflow-y-auto" aria-label="Evidence video">
                 <AccidentAlert alert={alertState} event={alertEvent} events={events} cameraName={alertEvent ? nameOf(alertEvent.source_id) : null} card={alertCard} caseId={caseId}
                                onOpenFrame={(e) => openTrail('frame', e)} onDetails={(e) => { pick(e); setTab('event'); }} onEvidence={(e) => { pick(e); setTab('evidence'); }}
                                onResume={() => { const st = useWorkspace.getState(); st.setAlert(null); st.setPlaying(true); }} onDismiss={() => useWorkspace.getState().setAlert(null)} onSeekFrame={seekToFrame} />
@@ -323,31 +323,32 @@ export default function Workspace() {
                   <IncidentGallery items={frames} />
                 </div>
               </Panel>
-              <Panel as="section" className="p-3 [@media(max-height:1100px)]:max-h-[48%] [@media(max-height:1100px)]:shrink-0 [@media(max-height:1100px)]:overflow-y-auto" aria-label="Timeline">
-                <SectionHeader title="Timeline" description={`${shown.items.length} incident events · ${shown.keyEvents.length} key events of ${events.length} placed · times on the case clock`} className="!mb-3" />
-                <IncidentSequence events={shown.keyEvents} unplaced={data.tl.unplaced || []} board={board} activeId={activeId} nameOf={nameOf} caseId={caseId} onSelect={pick} onSeekFrame={seekToFrame} onOpenFrame={(e) => openTrail('frame', e)} />
-                <Timeline tl={shown.tl} gaps={shown.gaps} overlaps={shown.overlaps} onSelect={(e) => { pick(e); if (tab !== 'technical' && tab !== 'findings') setTab('overview'); }} onSeek={seekTo} />
+              <Panel as="aside" className="min-w-0 p-4 xl:min-h-[28rem] [@media(max-height:1100px)]:min-h-0 [@media(max-height:1100px)]:flex-1 [@media(max-height:1100px)]:overflow-y-auto" aria-label="Inspector">
+                <div className="-mx-1 overflow-x-auto px-1"><Tabs value={tab} onChange={setTab} label="Inspector" items={[{ id: 'overview', label: 'Overview' }, { id: 'event', label: 'Event' }, { id: 'findings', label: 'Findings', count: model.findings.length }, { id: 'evidence', label: 'Evidence' }, { id: 'technical', label: 'Technical' }]} /></div>
+                <div className="mt-4">
+                  {tab === 'overview' && <Overview brief={brief} model={model} executive={executive} moment={moment} motions={motions} events={events} designation={eff.value} activeId={activeId} nameOf={nameOf} onSelectFinding={selectFinding} onSeeAll={() => setTab('findings')} onPick={pick} onOpenTrail={openTrail} onTechnical={() => setTab('technical')} />}
+                  {tab === 'event' && <EventTab event={model.events[activeId]} nameOf={nameOf} board={board} />}
+                  {tab === 'findings' && (selected
+                    ? <FindingDetail f={selected} events={model.events} onPick={pick} onOpenTrail={openTrail} onReview={review} onBack={clearFinding} />
+                    : model.findings.length === 0 ? <p className="t-small text-fg-3">No findings were produced for this reconstruction.</p>
+                      : <ul className="space-y-2">{model.findings.map((f) => <li key={f.id}><FindingRow f={f} selected={false} onSelect={selectFinding} /></li>)}</ul>)}
+                  {tab === 'evidence' && (
+                    <div className="space-y-4">
+                      {selected && <section><h4 className="t-eyebrow mb-1.5 text-fg-3">For the selected finding</h4><FindingDetail f={{ ...selected, summary: selected.title, uncertainty: null, action: null }} events={model.events} onPick={pick} onOpenTrail={openTrail} /></section>}
+                      <Evidence caseId={caseId} evidence={data.ev} />
+                    </div>
+                  )}
+                  {tab === 'technical' && <TechnicalPanel model={model} events={events} videos={videos} modelRuns={data.runs} shifts={shifts} unsynchronized={data.seek0.unsynchronized} gaps={data.gaps} activeId={activeId} onPick={pick} onSelectEvent={pickById} onOpenTrail={openTrail} />}
+                </div>
               </Panel>
             </div>
 
-            <Panel as="aside" className="order-2 h-fit min-w-0 p-4 xl:sticky xl:top-20 xl:order-3" aria-label="Inspector">
-              <div className="-mx-1 overflow-x-auto px-1"><Tabs value={tab} onChange={setTab} label="Inspector" items={[{ id: 'overview', label: 'Overview' }, { id: 'event', label: 'Event' }, { id: 'findings', label: 'Findings', count: model.findings.length }, { id: 'evidence', label: 'Evidence' }, { id: 'technical', label: 'Technical' }]} /></div>
-              <div className="mt-4 max-h-[calc(100vh-11rem)] overflow-auto pr-1">
-                {tab === 'overview' && <Overview brief={brief} model={model} executive={executive} moment={moment} motions={motions} events={events} designation={eff.value} activeId={activeId} nameOf={nameOf} onSelectFinding={selectFinding} onSeeAll={() => setTab('findings')} onPick={pick} onOpenTrail={openTrail} onTechnical={() => setTab('technical')} />}
-                {tab === 'event' && <EventTab event={model.events[activeId]} nameOf={nameOf} board={board} />}
-                {tab === 'findings' && (selected
-                  ? <FindingDetail f={selected} events={model.events} onPick={pick} onOpenTrail={openTrail} onReview={review} onBack={clearFinding} />
-                  : model.findings.length === 0 ? <p className="t-small text-fg-3">No findings were produced for this reconstruction.</p>
-                    : <ul className="space-y-2">{model.findings.map((f) => <li key={f.id}><FindingRow f={f} selected={false} onSelect={selectFinding} /></li>)}</ul>)}
-                {tab === 'evidence' && (
-                  <div className="space-y-4">
-                    {selected && <section><h4 className="t-eyebrow mb-1.5 text-fg-3">For the selected finding</h4><FindingDetail f={{ ...selected, summary: selected.title, uncertainty: null, action: null }} events={model.events} onPick={pick} onOpenTrail={openTrail} /></section>}
-                    <Evidence caseId={caseId} evidence={data.ev} />
-                  </div>
-                )}
-                {tab === 'technical' && <TechnicalPanel model={model} events={events} videos={videos} modelRuns={data.runs} shifts={shifts} unsynchronized={data.seek0.unsynchronized} gaps={data.gaps} activeId={activeId} onPick={pick} onSelectEvent={pickById} onOpenTrail={openTrail} />}
-              </div>
+            <Panel as="section" className="order-2 min-w-0 p-3 xl:order-3 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6.5rem)] xl:self-start xl:overflow-y-auto [@media(max-height:1100px)]:max-h-full [@media(max-height:1100px)]:overflow-y-auto" aria-label="Timeline">
+              <SectionHeader title="Timeline" description={`${shown.items.length} incident events · ${shown.keyEvents.length} key events of ${events.length} placed · times on the case clock`} className="!mb-3" />
+              <IncidentSequence events={shown.keyEvents} unplaced={data.tl.unplaced || []} board={board} activeId={activeId} nameOf={nameOf} caseId={caseId} onSelect={pick} onSeekFrame={seekToFrame} onOpenFrame={(e) => openTrail('frame', e)} />
+              <Timeline tl={shown.tl} gaps={shown.gaps} overlaps={shown.overlaps} onSelect={(e) => { pick(e); if (tab !== 'technical' && tab !== 'findings') setTab('overview'); }} onSeek={seekTo} />
             </Panel>
+
 
             {navOpen && <div className="order-3 xl:order-1 [@media(max-height:1100px)]:max-h-full [@media(max-height:1100px)]:overflow-y-auto">{NavRail}</div>}
           </div>
