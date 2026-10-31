@@ -1,0 +1,490 @@
+{
+  "designation": "REAL footage, hand-labelled, tiny n; see caveat",
+  "event_version": "legacy",
+  "video_events_version": "2",
+  "sample_fps": 5.0,
+  "scores": {
+    "alert_types": [
+      "possible_collision"
+    ],
+    "counts": {
+      "tp": 1,
+      "fp": 21,
+      "fn": 1,
+      "scored_clips": 12,
+      "negative_clips": 10
+    },
+    "precision": {
+      "value": 0.045,
+      "k": 1,
+      "n": 22,
+      "wilson95": [
+        0.008,
+        0.218
+      ]
+    },
+    "recall": {
+      "value": 0.5,
+      "k": 1,
+      "n": 2,
+      "wilson95": [
+        0.095,
+        0.905
+      ]
+    },
+    "f1": 0.083,
+    "false_positive_alerts_per_scored_clip": 1.75,
+    "false_positive_alerts_per_scored_minute": 7.195,
+    "negative_clips_with_any_alert": {
+      "value": 0.7,
+      "k": 7,
+      "n": 10,
+      "wilson95": [
+        0.397,
+        0.892
+      ]
+    },
+    "timing_error_ms": {
+      "n": 1,
+      "mae": 66.0,
+      "values": [
+        66
+      ]
+    },
+    "per_clip": {
+      "candidate-04": {
+        "alerts": 4,
+        "windows": 1,
+        "scored": true,
+        "tp": 1,
+        "fn": 0,
+        "fp": 0,
+        "braking_only_window": false
+      },
+      "accid3nd_south_50mm": {
+        "alerts": 3,
+        "windows": 1,
+        "scored": true,
+        "tp": 0,
+        "fn": 1,
+        "fp": 3,
+        "braking_only_window": false
+      },
+      "candidate-02": {
+        "alerts": 2,
+        "windows": 0,
+        "scored": false
+      },
+      "candidate-03": {
+        "alerts": 1,
+        "windows": 0,
+        "scored": false
+      },
+      "candidate-05": {
+        "alerts": 1,
+        "windows": 0,
+        "scored": false
+      },
+      "candidate-06": {
+        "alerts": 0,
+        "windows": 0,
+        "scored": false
+      },
+      "primary-demo": {
+        "alerts": 2,
+        "windows": 0,
+        "scored": false
+      },
+      "accid3nd_south_16mm": {
+        "alerts": 1,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 1,
+        "braking_only_window": false
+      },
+      "accid3nd_north_50mm": {
+        "alerts": 8,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 8,
+        "braking_only_window": false
+      },
+      "accid3nd_north_16mm": {
+        "alerts": 0,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 0,
+        "braking_only_window": false
+      },
+      "nuscenes_CAM_FRONT": {
+        "alerts": 2,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 2,
+        "braking_only_window": true
+      },
+      "nuscenes_CAM_FRONT_LEFT": {
+        "alerts": 1,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 1,
+        "braking_only_window": false
+      },
+      "nuscenes_CAM_FRONT_RIGHT": {
+        "alerts": 1,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 1,
+        "braking_only_window": false
+      },
+      "nuscenes_CAM_BACK": {
+        "alerts": 0,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 0,
+        "braking_only_window": false
+      },
+      "nuscenes_CAM_BACK_LEFT": {
+        "alerts": 0,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 0,
+        "braking_only_window": false
+      },
+      "nuscenes_CAM_BACK_RIGHT": {
+        "alerts": 2,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 2,
+        "braking_only_window": false
+      },
+      "comma2k19_seg40": {
+        "alerts": 3,
+        "windows": 0,
+        "scored": true,
+        "tp": 0,
+        "fn": 0,
+        "fp": 3,
+        "braking_only_window": false
+      }
+    },
+    "unscored_positive_clips": {
+      "candidate-02": {
+        "alerts": 2,
+        "reason": "accident present per source label but impact not located by annotator"
+      },
+      "candidate-03": {
+        "alerts": 1,
+        "reason": "accident present per source label but impact not located by annotator"
+      },
+      "candidate-05": {
+        "alerts": 1,
+        "reason": "accident present per source label but impact not located by annotator"
+      },
+      "candidate-06": {
+        "alerts": 0,
+        "reason": "accident present per source label but impact not located by annotator"
+      },
+      "primary-demo": {
+        "alerts": 2,
+        "reason": "accident present per source label but impact not located by annotator"
+      }
+    },
+    "caveat": "Tiny, hand-labelled set; thresholds were chosen while looking at these same clips, so these numbers are optimistic and do not estimate performance on other footage."
+  },
+  "per_clip_event_counts": {
+    "candidate-04": {
+      "events": {
+        "potential_interaction": 91,
+        "vehicle_maneuver_observed": 3,
+        "vehicle_enters_scene": 11,
+        "vehicle_slowing": 9,
+        "possible_collision": 4,
+        "vehicle_direction_change": 4,
+        "vehicle_leaves_scene": 6,
+        "possible_near_miss": 6,
+        "vehicle_stopped": 5
+      },
+      "tiers": {
+        "n/a": 139
+      },
+      "tracks": 21,
+      "seconds": 11.1
+    },
+    "accid3nd_south_50mm": {
+      "events": {
+        "potential_interaction": 246,
+        "vehicle_maneuver_observed": 23,
+        "vehicle_enters_scene": 23,
+        "vehicle_leaves_scene": 20,
+        "vehicle_direction_change": 6,
+        "vehicle_slowing": 4,
+        "possible_near_miss": 5,
+        "vehicle_stopped": 1,
+        "possible_collision": 3
+      },
+      "tiers": {
+        "n/a": 331
+      },
+      "tracks": 51,
+      "seconds": 5.8
+    },
+    "candidate-02": {
+      "events": {
+        "potential_interaction": 247,
+        "vehicle_maneuver_observed": 65,
+        "vehicle_enters_scene": 60,
+        "vehicle_leaves_scene": 48,
+        "vehicle_slowing": 2,
+        "vehicle_direction_change": 6,
+        "possible_collision": 2,
+        "vehicle_stopped": 6
+      },
+      "tiers": {
+        "n/a": 436
+      },
+      "tracks": 78,
+      "seconds": 12.6
+    },
+    "candidate-03": {
+      "events": {
+        "potential_interaction": 19,
+        "possible_collision": 1,
+        "vehicle_enters_scene": 3,
+        "vehicle_slowing": 3,
+        "vehicle_stopped": 5,
+        "vehicle_leaves_scene": 2,
+        "vehicle_direction_change": 1
+      },
+      "tiers": {
+        "n/a": 34
+      },
+      "tracks": 7,
+      "seconds": 11.3
+    },
+    "candidate-05": {
+      "events": {
+        "potential_interaction": 23,
+        "vehicle_maneuver_observed": 5,
+        "vehicle_enters_scene": 8,
+        "vehicle_leaves_scene": 6,
+        "possible_collision": 1,
+        "possible_near_miss": 1,
+        "vehicle_stopped": 1,
+        "vehicle_direction_change": 1
+      },
+      "tiers": {
+        "n/a": 46
+      },
+      "tracks": 11,
+      "seconds": 15.8
+    },
+    "candidate-06": {
+      "events": {
+        "potential_interaction": 3,
+        "vehicle_enters_scene": 4,
+        "vehicle_maneuver_observed": 2,
+        "vehicle_leaves_scene": 3,
+        "vehicle_slowing": 1,
+        "vehicle_direction_change": 1
+      },
+      "tiers": {
+        "n/a": 14
+      },
+      "tracks": 6,
+      "seconds": 11.1
+    },
+    "primary-demo": {
+      "events": {
+        "potential_interaction": 50,
+        "vehicle_maneuver_observed": 7,
+        "vehicle_enters_scene": 12,
+        "possible_collision": 2,
+        "possible_near_miss": 3,
+        "vehicle_direction_change": 1,
+        "vehicle_slowing": 1,
+        "vehicle_stopped": 3,
+        "vehicle_leaves_scene": 9
+      },
+      "tiers": {
+        "n/a": 88
+      },
+      "tracks": 22,
+      "seconds": 12.6
+    },
+    "accid3nd_south_16mm": {
+      "events": {
+        "potential_interaction": 217,
+        "vehicle_maneuver_observed": 23,
+        "vehicle_enters_scene": 25,
+        "vehicle_leaves_scene": 23,
+        "vehicle_slowing": 3,
+        "possible_near_miss": 3,
+        "vehicle_direction_change": 2,
+        "possible_collision": 1
+      },
+      "tiers": {
+        "n/a": 297
+      },
+      "tracks": 44,
+      "seconds": 5.5
+    },
+    "accid3nd_north_50mm": {
+      "events": {
+        "potential_interaction": 246,
+        "vehicle_direction_change": 14,
+        "vehicle_maneuver_observed": 22,
+        "vehicle_slowing": 5,
+        "possible_collision": 8,
+        "vehicle_enters_scene": 23,
+        "vehicle_leaves_scene": 19,
+        "possible_near_miss": 15,
+        "vehicle_stopped": 1
+      },
+      "tiers": {
+        "n/a": 353
+      },
+      "tracks": 46,
+      "seconds": 5.9
+    },
+    "accid3nd_north_16mm": {
+      "events": {
+        "potential_interaction": 106,
+        "vehicle_maneuver_observed": 23,
+        "vehicle_enters_scene": 22,
+        "vehicle_leaves_scene": 20,
+        "vehicle_direction_change": 1,
+        "vehicle_slowing": 1
+      },
+      "tiers": {
+        "n/a": 173
+      },
+      "tracks": 36,
+      "seconds": 5.7
+    },
+    "nuscenes_CAM_FRONT": {
+      "events": {
+        "potential_interaction": 63,
+        "vehicle_direction_change": 5,
+        "vehicle_slowing": 5,
+        "possible_collision": 2,
+        "vehicle_enters_scene": 19,
+        "vehicle_leaves_scene": 15,
+        "possible_near_miss": 1,
+        "vehicle_stopped": 3
+      },
+      "tiers": {
+        "n/a": 113
+      },
+      "tracks": 32,
+      "seconds": 5.3
+    },
+    "nuscenes_CAM_FRONT_LEFT": {
+      "events": {
+        "potential_interaction": 62,
+        "vehicle_enters_scene": 19,
+        "vehicle_direction_change": 1,
+        "vehicle_slowing": 2,
+        "vehicle_leaves_scene": 14,
+        "possible_near_miss": 2,
+        "possible_collision": 1
+      },
+      "tiers": {
+        "n/a": 101
+      },
+      "tracks": 29,
+      "seconds": 5.6
+    },
+    "nuscenes_CAM_FRONT_RIGHT": {
+      "events": {
+        "potential_interaction": 47,
+        "vehicle_leaves_scene": 12,
+        "vehicle_enters_scene": 13,
+        "vehicle_slowing": 1,
+        "vehicle_direction_change": 1,
+        "possible_collision": 1,
+        "possible_near_miss": 1
+      },
+      "tiers": {
+        "n/a": 76
+      },
+      "tracks": 27,
+      "seconds": 5.7
+    },
+    "nuscenes_CAM_BACK": {
+      "events": {
+        "vehicle_direction_change": 1,
+        "potential_interaction": 30,
+        "vehicle_enters_scene": 17,
+        "vehicle_leaves_scene": 14
+      },
+      "tiers": {
+        "n/a": 62
+      },
+      "tracks": 34,
+      "seconds": 5.3
+    },
+    "nuscenes_CAM_BACK_LEFT": {
+      "events": {
+        "vehicle_enters_scene": 17,
+        "potential_interaction": 80,
+        "vehicle_leaves_scene": 11,
+        "vehicle_direction_change": 1
+      },
+      "tiers": {
+        "n/a": 109
+      },
+      "tracks": 37,
+      "seconds": 6.1
+    },
+    "nuscenes_CAM_BACK_RIGHT": {
+      "events": {
+        "potential_interaction": 34,
+        "vehicle_enters_scene": 9,
+        "vehicle_leaves_scene": 8,
+        "vehicle_slowing": 1,
+        "possible_collision": 2
+      },
+      "tiers": {
+        "n/a": 54
+      },
+      "tracks": 24,
+      "seconds": 6.0
+    },
+    "comma2k19_seg40": {
+      "events": {
+        "potential_interaction": 633,
+        "vehicle_direction_change": 27,
+        "vehicle_leaves_scene": 164,
+        "vehicle_enters_scene": 160,
+        "vehicle_slowing": 11,
+        "possible_near_miss": 2,
+        "possible_collision": 3,
+        "vehicle_stopped": 2
+      },
+      "tiers": {
+        "n/a": 1002
+      },
+      "tracks": 223,
+      "seconds": 46.1
+    }
+  }
+}
