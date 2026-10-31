@@ -145,3 +145,21 @@ def is_collision(signals: list[str]) -> bool:
     core = {"approach", "arrest"} <= k and bool(k & {"shape", "cue", "rest"})
     cue = "cue" in k and bool(k & {"approach", "arrest", "shape"})
     return core or cue
+
+
+FEATURES = ["closed_widths", "closing_speed", "closing_share", "rel_speed_before", "rel_speed_after", "speed_ratio", "deflection_deg",
+            "distance_after", "max_aspect_change", "cue_frames", "common_slowdown_share", "own_speed_drop", "own_heading_change", "max_iou"]
+
+
+def features(ev: dict, max_iou: float = 0.0) -> list[float]:
+    """Numeric vector for one candidate pair (see FEATURES). A signal that could not be computed is -1, never a guessed value.
+    These are the same quantities the rules threshold, so a learned classifier and the rules can be compared on identical inputs."""
+    d = ev.get("details", {})
+    ap, ar, rs, sh, cu = d.get("approach", {}), d.get("arrest", {}), d.get("rest", {}), d.get("shape", {}), d.get("cue", {})
+    own = d.get("own_motion_change") or []
+    before, after = ar.get("relative_speed_before"), ar.get("relative_speed_after")
+    g = lambda x: -1.0 if x is None else float(x)  # noqa: E731
+    return [g(ap.get("closed_widths")), g(ap.get("closing_speed")), g(ap.get("closing_share")), g(before), g(after),
+            g(after / before) if before and after is not None else -1.0, g(ar.get("deflection_deg")), g(rs.get("distance_after_widths")),
+            g(sh.get("max_aspect_change")), g(cu.get("frames")), g(d.get("common_slowdown", {}).get("share")),
+            float(any(o["kind"] == "speed_drop" for o in own)), float(any(o["kind"] == "heading_change" for o in own)), float(max_iou)]

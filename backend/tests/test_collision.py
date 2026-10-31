@@ -42,3 +42,10 @@ def test_unphysical_jumps_are_tracking_discontinuities_not_motion():
     b = track(2, "car", lambda k: (900 - 400 * k, 200), 12)
     events, dbg = run(a, b)
     assert of(events, "possible_collision") == [] and s > 0
+
+
+def test_features_are_a_fixed_length_vector_with_minus_one_for_unknown():
+    _, dbg = run(track(1, "car", lambda k: (50 + 12 * min(k, 14), 200), 30), track(2, "car", lambda k: (330 - 12 * min(k, 14), 200), 30))
+    v = collision.features(dbg[0]["ev"], dbg[0]["max_iou"])
+    assert len(v) == len(collision.FEATURES) and all(isinstance(x, float) for x in v)
+    assert collision.features({}) [:3] == [-1.0, -1.0, -1.0]
